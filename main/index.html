@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WxTiles Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient-shape shape-a"></div>
+    <div class="ambient-shape shape-b"></div>
+
+    <main class="shell">
+      <section class="panel">
+        <h1>WxTiles Explorer</h1>
+        <p class="subtitle">Modern rebuild with full demo parity controls.</p>
+
+        <div class="control-group">
+          <label for="datasetFilter">Filter</label>
+          <input id="datasetFilter" type="text" placeholder="Type to filter datasets (blank = all)" />
+        </div>
+
+        <div class="control-group">
+          <label for="dataset">Dataset</label>
+          <select id="dataset"></select>
+        </div>
+
+        <div class="control-group">
+          <label for="variable">Variable</label>
+          <select id="variable"></select>
+        </div>
+
+        <div class="control-group">
+          <label for="timeSelect">Time</label>
+          <select id="timeSelect"></select>
+        </div>
+
+        <div class="control-group">
+          <label for="basemapSelect">Basemap</label>
+          <select id="basemapSelect">
+            <option value="osm" selected>OpenStreetMap</option>
+            <option value="esriWorldImagery">Esri World Imagery</option>
+          </select>
+        </div>
+
+        <div class="button-row tight">
+          <button id="startBtn" type="button">Start</button>
+          <button id="recordBtn" type="button">Save Animation</button>
+        </div>
+
+        <div class="button-row tight">
+          <button id="styleToggleBtn" type="button" class="ghost">Custom Style</button>
+        </div>
+
+        <section id="styleEditor" class="editor collapsed">
+          <h2>customStyle</h2>
+
+          <div class="control-group">
+            <label for="styleJson">json</label>
+            <textarea id="styleJson" rows="8" readonly></textarea>
+          </div>
+
+          <div class="control-group">
+            <label for="styleParent">parent</label>
+            <input id="styleParent" type="text" placeholder="base" />
+          </div>
+
+          <div class="control-group">
+            <label for="styleName">name</label>
+            <input id="styleName" type="text" placeholder="custom" />
+          </div>
+
+          <div class="control-group">
+            <label for="fill">fill</label>
+            <select id="fill">
+              <option value="gradient">gradient</option>
+              <option value="solid">solid</option>
+              <option value="none">none</option>
+            </select>
+          </div>
+
+          <div class="grid-two">
+            <div class="control-group">
+              <label for="isolineColorMode">isolineColor</label>
+              <select id="isolineColorMode">
+                <option value="inverted">inverted</option>
+                <option value="fill">fill</option>
+                <option value="none">none</option>
+                <option value="custom">custom</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label for="isolineColorCustom">isolineColorCustom</label>
+              <input id="isolineColorCustom" type="color" value="#000000" />
+            </div>
+          </div>
+
+          <div class="grid-two toggles">
+            <label><input id="isolineText" type="checkbox" checked /> isolineText</label>
+          </div>
+
+          <div class="control-group">
+            <label for="vectorFactor">vectorFactor</label>
+            <input id="vectorFactor" type="number" min="0.1" max="10" step="0.1" value="1" />
+          </div>
+
+          <div class="control-group">
+            <label for="vectorType">vectorType</label>
+            <select id="vectorType">
+              <option value="arrows">arrows</option>
+              <option value="barbs">barbs</option>
+              <option value="none">none</option>
+            </select>
+          </div>
+
+          <div class="grid-two">
+            <div class="control-group">
+              <label for="vectorColorMode">vectorColor</label>
+              <select id="vectorColorMode">
+                <option value="inverted">inverted</option>
+                <option value="fill">fill</option>
+                <option value="none">none</option>
+                <option value="custom">custom</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label for="vectorColorCustom">vectorColorCustom</label>
+              <input id="vectorColorCustom" type="color" value="#000000" />
+            </div>
+          </div>
+
+          <div class="grid-two">
+            <div class="control-group">
+              <label for="streamLineColorMode">streamLineColor</label>
+              <select id="streamLineColorMode">
+                <option value="inverted">inverted</option>
+                <option value="fill">fill</option>
+                <option value="none">none</option>
+                <option value="custom">custom</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label for="streamLineColorCustom">streamLineColorCustom</label>
+              <input id="streamLineColorCustom" type="color" value="#000000" />
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label for="streamLineSpeedFactor">streamLineSpeedFactor</label>
+            <input id="streamLineSpeedFactor" type="range" min="0.1" max="10" step="0.1" value="1" />
+          </div>
+
+          <div class="grid-two toggles">
+            <label><input id="streamLineStatic" type="checkbox" /> streamLineStatic</label>
+            <label><input id="showBelowMin" type="checkbox" checked /> showBelowMin</label>
+            <label><input id="showAboveMax" type="checkbox" checked /> showAboveMax</label>
+          </div>
+
+          <div class="control-group">
+            <label for="colorScheme">colorScheme</label>
+            <select id="colorScheme"></select>
+          </div>
+
+          <div id="palettePreview" class="palette-preview"></div>
+
+          <div class="control-group">
+            <label for="colors">colors</label>
+            <input id="colors" type="text" placeholder='["#0000ffff", "#00ffffff", "#ff0000ff"]' />
+          </div>
+
+          <div class="control-group">
+            <label for="colorMap">colorMap</label>
+            <input id="colorMap" type="text" placeholder='[[0, "#0000ff"], [20, "#ff0000"]]' />
+          </div>
+
+          <div class="control-group">
+            <label for="levels">levels</label>
+            <input id="levels" type="text" placeholder='[0,5,10,15,20]' />
+          </div>
+
+          <div class="control-group">
+            <label for="blurRadius">blurRadius</label>
+            <input id="blurRadius" type="range" min="0" max="10" step="1" value="0" />
+          </div>
+
+          <div class="control-group">
+            <label for="addDegrees">addDegrees</label>
+            <input id="addDegrees" type="number" min="0" max="360" step="1" value="0" />
+          </div>
+
+          <div class="control-group">
+            <label for="units">units</label>
+            <select id="units"></select>
+          </div>
+
+          <div class="control-group">
+            <label for="extraUnits">extraUnits</label>
+            <input id="extraUnits" type="text" placeholder='{"m.s^{-1}": ["m/s", 1]}' />
+          </div>
+
+          <div class="control-group">
+            <label for="mask">mask</label>
+            <select id="mask">
+              <option value="none">none</option>
+              <option value="sea">sea</option>
+              <option value="land">land</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="glAnimationSpeed">animationSpeed</label>
+            <input id="glAnimationSpeed" type="range" min="0.1" max="10" step="0.1" value="1" />
+          </div>
+
+          <div class="control-group">
+            <label for="glNoiseTexturePow">noiseTexturePow</label>
+            <input id="glNoiseTexturePow" type="range" min="5" max="8" step="1" value="5" />
+          </div>
+
+          <div class="control-group">
+            <label for="glVectorFieldFactor">vectorFieldFactor</label>
+            <input id="glVectorFieldFactor" type="range" min="0.1" max="3" step="0.1" value="1" />
+          </div>
+
+          <div class="control-group">
+            <label for="glAnimationIntensity">animationIntensity</label>
+            <input id="glAnimationIntensity" type="range" min="0.1" max="10" step="0.1" value="5" />
+          </div>
+
+          <div class="control-group">
+            <label for="glWavesCount">wavesCount</label>
+            <input id="glWavesCount" type="range" min="2" max="10" step="1" value="4" />
+          </div>
+        </section>
+
+        <div class="stats" id="status">Initializing map...</div>
+        <div class="stats" id="meta">dataset=loading...</div>
+        <div class="stats mono" id="cursor">lnglat=(0.00, 0.00)</div>
+        <div class="stats mono" id="values">style=outside source=outside</div>
+
+        <div class="legend-wrap">
+          <canvas id="legend" width="620" height="44"></canvas>
+        </div>
+      </section>
+
+      <section class="map-wrap">
+        <div id="map"></div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
