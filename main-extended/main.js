@@ -149,6 +149,9 @@ const els = {
   savedViews: document.getElementById("savedViews"),
   loadViewBtn: document.getElementById("loadViewBtn"),
   deleteViewBtn: document.getElementById("deleteViewBtn"),
+  exportViewBtn: document.getElementById("exportViewBtn"),
+  importViewBtn: document.getElementById("importViewBtn"),
+  importViewFile: document.getElementById("importViewFile"),
   layers: {
     A: {
       variable: document.getElementById("variableA"),
@@ -1191,6 +1194,15 @@ async function loadViewByName(name) {
     return;
   }
 
+  await applyViewSettings(view, `Loaded view: ${targetName}`);
+}
+
+async function applyViewSettings(view, successStatus) {
+  if (!view || typeof view !== "object") {
+    setStatus("Invalid view settings.");
+    return;
+  }
+
   stopAnimation();
 
   if (view.basemap) {
@@ -1229,7 +1241,7 @@ async function loadViewByName(name) {
   }
 
   syncLayerOrdering();
-  setStatus(`Loaded view: ${targetName}`);
+  setStatus(successStatus || "View settings applied.");
 }
 
 function deleteViewByName(name) {
@@ -1241,6 +1253,145 @@ function deleteViewByName(name) {
   setSavedViews(getSavedViews().filter((v) => v.name !== targetName));
   refreshSavedViewsDropdown();
   setStatus(`Deleted view: ${targetName}`);
+}
+
+function sanitizeFileNamePart(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-z0-9._-]+/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+}
+
+function buildExportViewObject() {
+  const selectedName = (els.savedViews.value || "").trim();
+  const typedName = (els.viewName.value || "").trim();
+  const baseName = selectedName || typedName || "shared-view";
+  return snapshotCurrentView(baseName);
+}
+
+function exportCurrentViewToFile() {
+  const view = buildExportViewObject();
+
+  const payload = {
+    format: "wxtiles-extended-view",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    view,
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const safeName = sanitizeFileNamePart(view.name) || "view";
+
+  anchor.href = url;
+  anchor.download = `wxtiles-extended-${safeName}-${stamp}.json`;
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  setStatus(`Exported current view settings: ${view.name}`);
+}
+
+function normalizeImportedViews(input) {
+  if (Array.isArray(input)) return input;
+  if (!input || typeof input !== "object") return [];
+
+  if (Array.isArray(input.views)) return input.views;
+  if (input.view && typeof input.view === "object") return [input.view];
+  if (input.overlayA || input.overlayB) {
+    return [
+      {
+        name: String(input.name || "imported-view"),
+        dataset: input.dataset,
+        datasetB: input.datasetB,
+        basemap: input.basemap,
+        animationSpeed: input.animationSpeed,
+        lockAnimation: input.lockAnimation,
+        layers: {
+          A: input.overlayA || {},
+          B: input.overlayB || {},
+        },
+      },
+    ];
+  }
+  if (input.layers && typeof input.layers === "object") return [input];
+
+  return [];
+}
+
+function isValidImportedView(view) {
+  if (!view || typeof view !== "object") return false;
+  if (!String(view.name || "").trim()) return false;
+  if (!view.layers || typeof view.layers !== "object") return false;
+  if (!view.layers.A || !view.layers.B) return false;
+  return true;
+}
+
+async function importViewsFromText(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    setStatus("Import failed: invalid JSON file.");
+    return;
+  }
+
+  const candidateViews = normalizeImportedViews(parsed);
+  const importedViews = candidateViews
+    .filter(isValidImportedView)
+    .map((view, index) => ({
+      ...view,
+      name: String(view.name || `imported-view-${index + 1}`).trim(),
+      importedAt: new Date().toISOString(),
+    }));
+
+  if (importedViews.length === 0) {
+    setStatus("Import failed: no valid Extended views found in file.");
+    return;
+  }
+
+  const existing = getSavedViews();
+  const mergedMap = new Map(existing.map((view) => [String(view.name), view]));
+  for (const view of importedViews) {
+    mergedMap.set(view.name, view);
+  }
+
+  const mergedViews = Array.from(mergedMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  setSavedViews(mergedViews);
+
+  const firstImportedName = importedViews[0].name;
+  refreshSavedViewsDropdown(firstImportedName);
+  await applyViewSettings(importedViews[0], `Imported and applied view: ${firstImportedName}`);
+
+  setStatus(
+    importedViews.length === 1
+      ? `Imported and applied 1 view: ${firstImportedName}`
+      : `Imported ${importedViews.length} views and applied: ${firstImportedName}`,
+  );
+}
+
+function triggerImportViewFile() {
+  if (!els.importViewFile) return;
+  els.importViewFile.value = "";
+  els.importViewFile.click();
+}
+
+function readFileAsText(file) {
+  if (!file) return Promise.reject(new Error("No file provided"));
+  if (typeof file.text === "function") return file.text();
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Unable to read file"));
+    reader.readAsText(file);
+  });
 }
 
 async function reloadBothLayers() {
@@ -1354,6 +1505,30 @@ function bindEvents() {
   els.deleteViewBtn.addEventListener("click", () => {
     deleteViewByName(els.savedViews.value);
   });
+
+  if (els.exportViewBtn) {
+    els.exportViewBtn.addEventListener("click", () => {
+      exportCurrentViewToFile();
+    });
+  }
+
+  if (els.importViewBtn) {
+    els.importViewBtn.addEventListener("click", () => {
+      triggerImportViewFile();
+    });
+  }
+
+  if (els.importViewFile) {
+    els.importViewFile.addEventListener("change", () => {
+      const file = els.importViewFile.files?.[0];
+      if (!file) return;
+      void readFileAsText(file)
+        .then((text) => importViewsFromText(text))
+        .catch(() => {
+          setStatus("Import failed: unable to read file.");
+        });
+    });
+  }
 
   for (const layerKey of ["A", "B"]) {
     const layerEls = els.layers[layerKey];
