@@ -1031,7 +1031,7 @@ async function startAnimation() {
   state.animationAbort = new AbortController();
 
   try {
-    await state.wxsource.setCoarseLevel(2);
+    await state.wxsource.setCoarseLevel(0);
     const initialTimes = state.wxsource.getAllTimes() || [];
     const current = state.wxsource.getTime();
     const currentIndex = initialTimes.indexOf(current);

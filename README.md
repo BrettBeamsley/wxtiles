@@ -23,6 +23,7 @@ python -m http.server 8080
 Then open `http://localhost:8080` (portal landing page).
 
 - Main explorer: `http://localhost:8080/main/`
+- Main explorer extended: `http://localhost:8080/main-extended/`
 - Threshold explorer: `http://localhost:8080/threshold/`
 - Compare explorer: `http://localhost:8080/compare/`
 
@@ -40,6 +41,7 @@ After deployment, your URLs will be:
 
 - Portal landing: `https://<your-user-or-org>.github.io/<repo>/`
 - Main explorer: `https://<your-user-or-org>.github.io/<repo>/main/`
+- Main explorer extended: `https://<your-user-or-org>.github.io/<repo>/main-extended/`
 - Threshold explorer: `https://<your-user-or-org>.github.io/<repo>/threshold/`
 - Compare explorer: `https://<your-user-or-org>.github.io/<repo>/compare/`
 

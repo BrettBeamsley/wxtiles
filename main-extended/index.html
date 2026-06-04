@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WxTiles Explorer Extended</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient-shape shape-a"></div>
+    <div class="ambient-shape shape-b"></div>
+
+    <main class="shell shell-extended">
+      <section class="panel panel-extended">
+        <h1>WxTiles Explorer Extended</h1>
+        <p class="subtitle">Dual overlays with independent styles and optional observational dataset for Overlay B.</p>
+
+        <div class="control-group">
+          <label for="datasetFilter">Filter</label>
+          <input id="datasetFilter" type="text" placeholder="Type to filter datasets (blank = all)" />
+        </div>
+
+        <div class="control-group">
+          <label for="dataset">Dataset</label>
+          <select id="dataset"></select>
+        </div>
+
+        <div class="control-group">
+          <label for="basemapSelect">Basemap</label>
+          <select id="basemapSelect">
+            <option value="osm" selected>OpenStreetMap</option>
+            <option value="esriWorldImagery">Esri World Imagery</option>
+          </select>
+        </div>
+
+        <section class="top-tools">
+          <h2>Playback & Views</h2>
+          <div class="grid-three">
+            <div class="control-group">
+              <label for="animateBtn">Animation</label>
+              <button id="animateBtn" type="button">Start Animation</button>
+            </div>
+            <div class="control-group">
+              <label for="animationSpeed">Speed</label>
+              <select id="animationSpeed">
+                <option value="slow">Slow</option>
+                <option value="normal" selected>Normal</option>
+                <option value="fast">Fast</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label for="lockAnimation">Lock A/B Timesteps</label>
+              <select id="lockAnimation">
+                <option value="sync" selected>Sync</option>
+                <option value="independent">Independent</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="button-row tight">
+            <button id="recordBtn" type="button" class="ghost">Save Animation</button>
+          </div>
+
+          <div class="grid-three">
+            <div class="control-group">
+              <label for="viewName">View Name</label>
+              <input id="viewName" type="text" placeholder="e.g. humidity+pressure default" />
+            </div>
+            <div class="control-group">
+              <label for="saveViewBtn">Save Current View</label>
+              <button id="saveViewBtn" type="button" class="ghost">Save View</button>
+            </div>
+            <div class="control-group">
+              <label for="savedViews">Saved Views</label>
+              <select id="savedViews"></select>
+            </div>
+          </div>
+
+          <div class="button-row tight">
+            <button id="loadViewBtn" type="button" class="ghost">Load Selected View</button>
+            <button id="deleteViewBtn" type="button" class="ghost danger">Delete Selected View</button>
+          </div>
+        </section>
+
+        <section class="layer-block" id="layerBlockA">
+          <h2>Overlay A</h2>
+          <div class="grid-two">
+            <div class="control-group">
+              <label for="variableA">Variable</label>
+              <select id="variableA"></select>
+            </div>
+            <div class="control-group">
+              <label for="timeA">Time</label>
+              <select id="timeA"></select>
+            </div>
+          </div>
+
+          <div class="grid-two">
+            <div class="control-group">
+              <label for="opacityA">Opacity</label>
+              <input id="opacityA" type="range" min="0" max="1" step="0.01" value="0.92" />
+            </div>
+            <div class="control-group">
+              <label>&nbsp;</label>
+              <button id="styleToggleA" type="button" class="ghost">Custom Style A</button>
+            </div>
+          </div>
+
+          <section id="styleEditorA" class="editor collapsed style-editor"></section>
+
+          <div class="stats" id="metaA">A: dataset=loading...</div>
+          <div class="stats mono" id="valuesA">A: style=outside source=outside</div>
+          <div class="legend-wrap">
+            <canvas id="legendA" width="620" height="44"></canvas>
+          </div>
+          <div id="paletteA" class="palette-preview"></div>
+        </section>
+
+        <section class="layer-block" id="layerBlockB">
+          <h2>Overlay B</h2>
+          <div class="control-group">
+            <label for="datasetB">Dataset B (obs)</label>
+            <select id="datasetB"></select>
+          </div>
+          <div class="grid-two">
+            <div class="control-group">
+              <label for="variableB">Variable</label>
+              <select id="variableB"></select>
+            </div>
+            <div class="control-group">
+              <label for="timeB">Time</label>
+              <select id="timeB"></select>
+            </div>
+          </div>
+
+          <div class="grid-two">
+            <div class="control-group">
+              <label for="opacityB">Opacity</label>
+              <input id="opacityB" type="range" min="0" max="1" step="0.01" value="0.65" />
+            </div>
+            <div class="control-group">
+              <label>&nbsp;</label>
+              <button id="styleToggleB" type="button" class="ghost">Custom Style B</button>
+            </div>
+          </div>
+
+          <section id="styleEditorB" class="editor collapsed style-editor"></section>
+
+          <div class="stats" id="metaB">B: dataset=loading...</div>
+          <div class="stats mono" id="valuesB">B: style=outside source=outside</div>
+          <div class="legend-wrap">
+            <canvas id="legendB" width="620" height="44"></canvas>
+          </div>
+          <div id="paletteB" class="palette-preview"></div>
+        </section>
+
+        <div class="stats" id="status">Initializing map...</div>
+        <div class="stats mono" id="cursor">lnglat=(0.00, 0.00)</div>
+      </section>
+
+      <section class="map-wrap">
+        <div id="map"></div>
+        <div id="mapTimeUtc" class="map-time-utc">UTC A: -- | UTC B: --</div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

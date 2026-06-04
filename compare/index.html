@@ -13,7 +13,7 @@
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
-    <link rel="stylesheet" href="./compare.css?v=20260603" />
+    <link rel="stylesheet" href="./compare.css?v=20260605" />
   </head>
   <body>
     <div class="ambient-shape shape-a"></div>
@@ -32,8 +32,11 @@
               <option value="normal" selected>Normal</option>
               <option value="fast">Fast</option>
             </select>
+            <label><input id="lockDatasets" type="checkbox" /> Lock Datasets</label>
             <label><input id="lockVariables" type="checkbox" /> Lock Variables</label>
             <label><input id="lockTimeSteps" type="checkbox" /> Lock Time Steps</label>
+            <select id="extendedViews" class="compare-speed-select" title="Views saved from Main Extended"></select>
+            <button id="loadExtendedViewBtn" type="button" class="ghost">Load Extended View</button>
           </div>
         </div>
       </section>
@@ -62,6 +65,7 @@
             <canvas id="legend0" class="compare-legend" width="200" height="44"></canvas>
           </div>
           <div class="panel-meta">
+            <div class="stats mono" id="times0"></div>
             <div class="stats mono" id="meta0">dataset=loading...</div>
             <div class="stats mono" id="values0">style=outside source=outside</div>
           </div>
@@ -89,6 +93,7 @@
             <canvas id="legend1" class="compare-legend" width="200" height="44"></canvas>
           </div>
           <div class="panel-meta">
+            <div class="stats mono" id="times1"></div>
             <div class="stats mono" id="meta1">dataset=loading...</div>
             <div class="stats mono" id="values1">style=outside source=outside</div>
           </div>
@@ -116,6 +121,7 @@
             <canvas id="legend2" class="compare-legend" width="200" height="44"></canvas>
           </div>
           <div class="panel-meta">
+            <div class="stats mono" id="times2"></div>
             <div class="stats mono" id="meta2">dataset=loading...</div>
             <div class="stats mono" id="values2">style=outside source=outside</div>
           </div>
@@ -298,6 +304,6 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script type="module" src="./compare.js"></script>
+    <script type="module" src="./compare.js?v=20260605d"></script>
   </body>
 </html>

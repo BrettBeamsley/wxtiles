@@ -238,6 +238,11 @@ input[type="range"] {
   min-width: 80px;
 }
 
+#extendedViews.compare-speed-select {
+  min-width: 260px;
+  max-width: 360px;
+}
+
 .compare-toggles label {
   display: flex;
   gap: 6px;
@@ -343,7 +348,15 @@ input[type="range"] {
   background: rgba(255, 255, 255, 0.7);
 }
 
-.panel-meta {
+.panel-meta .stats:first-child {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.6);
+  border-style: solid;
+}
+
   padding: 3px 6px 5px;
   border-top: 1px solid rgba(32, 35, 33, 0.12);
   display: flex;
@@ -472,6 +485,11 @@ input[type="range"] {
     max-width: 100%;
     max-height: none;
     margin: 0 10px 10px;
+  }
+
+  #extendedViews.compare-speed-select {
+    min-width: 220px;
+    max-width: 100%;
   }
 }
 

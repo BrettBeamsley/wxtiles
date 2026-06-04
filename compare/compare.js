@@ -1,6 +1,29 @@
 import { WxAPI } from "https://esm.sh/@metoceanapi/wxtiles-leaflet";
 
 const WX_DEMO_CSS_URL = "https://metoceanapi.github.io/wxtiles-leaflet/script/script.css";
+const EXTENDED_VIEW_STORAGE_KEY = "wxtiles-main-extended-views";
+const EXTENDED_VIEW_STORAGE_FALLBACK_KEYS = [
+  EXTENDED_VIEW_STORAGE_KEY,
+  "wxtiles-main-extended-views",
+  "wxtiles-main-views",
+];
+
+function collectViewCandidates(parsed) {
+  if (!parsed) return [];
+  if (Array.isArray(parsed)) return parsed;
+
+  if (typeof parsed === "object") {
+    if (Array.isArray(parsed.views)) return parsed.views;
+    if (Array.isArray(parsed.items)) return parsed.items;
+
+    const values = Object.values(parsed);
+    if (values.length > 0 && values.every((v) => v && typeof v === "object")) {
+      return values;
+    }
+  }
+
+  return [];
+}
 
 const COLOR_SCHEMES = {
   none: ["#00000000", "#00000000"],
@@ -81,6 +104,7 @@ const state = {
   wxapi: undefined,
   allDatasets: [],
   currentStyle: structuredClone(DEFAULT_STYLE),
+  lockDatasets: false,
   lockVariables: false,
   lockTimeSteps: false,
   syncingView: false,
@@ -90,17 +114,50 @@ const state = {
   animationRunId: 0,
   animationSpeedPreset: "normal",
   panels: [
-    { wxsource: undefined, datasetManager: undefined, cursorLatLng: L.latLng(0, 0), busy: false, warnings: { variable: "", time: "" } },
-    { wxsource: undefined, datasetManager: undefined, cursorLatLng: L.latLng(0, 0), busy: false, warnings: { variable: "", time: "" } },
-    { wxsource: undefined, datasetManager: undefined, cursorLatLng: L.latLng(0, 0), busy: false, warnings: { variable: "", time: "" } },
+    {
+      wxsource: undefined,
+      wxsourceSecondary: undefined,
+      datasetManager: undefined,
+      secondaryDatasetManager: undefined,
+      style: structuredClone(DEFAULT_STYLE),
+      secondaryStyle: structuredClone(DEFAULT_STYLE),
+      cursorLatLng: L.latLng(0, 0),
+      busy: false,
+      warnings: { variable: "", time: "" },
+    },
+    {
+      wxsource: undefined,
+      wxsourceSecondary: undefined,
+      datasetManager: undefined,
+      secondaryDatasetManager: undefined,
+      style: structuredClone(DEFAULT_STYLE),
+      secondaryStyle: structuredClone(DEFAULT_STYLE),
+      cursorLatLng: L.latLng(0, 0),
+      busy: false,
+      warnings: { variable: "", time: "" },
+    },
+    {
+      wxsource: undefined,
+      wxsourceSecondary: undefined,
+      datasetManager: undefined,
+      secondaryDatasetManager: undefined,
+      style: structuredClone(DEFAULT_STYLE),
+      secondaryStyle: structuredClone(DEFAULT_STYLE),
+      cursorLatLng: L.latLng(0, 0),
+      busy: false,
+      warnings: { variable: "", time: "" },
+    },
   ],
 };
 
 const els = {
   playBtn: document.getElementById("playBtn"),
   animationSpeedPreset: document.getElementById("animationSpeedPreset"),
+  lockDatasets: document.getElementById("lockDatasets"),
   lockVariables: document.getElementById("lockVariables"),
   lockTimeSteps: document.getElementById("lockTimeSteps"),
+  extendedViews: document.getElementById("extendedViews"),
+  loadExtendedViewBtn: document.getElementById("loadExtendedViewBtn"),
   styleToggleBtn: document.getElementById("styleToggleBtn"),
   styleEditor: document.getElementById("styleEditor"),
   styleJson: document.getElementById("styleJson"),
@@ -118,6 +175,105 @@ function updatePlayButtonState() {
   if (!els.playBtn) return;
   els.playBtn.textContent = state.animating ? "Stop" : "Play";
   els.playBtn.classList.toggle("playing", state.animating);
+}
+
+function getSavedExtendedViews() {
+  const byName = new Map();
+  const storages = [localStorage, sessionStorage];
+
+  for (const storage of storages) {
+    const candidateKeys = new Set(EXTENDED_VIEW_STORAGE_FALLBACK_KEYS);
+    try {
+      for (let i = 0; i < storage.length; i++) {
+        const dynamicKey = storage.key(i);
+        if (!dynamicKey) continue;
+        if (/wxtiles/i.test(dynamicKey) && /view/i.test(dynamicKey)) {
+          candidateKeys.add(dynamicKey);
+        }
+      }
+    } catch {
+      // Ignore key enumeration errors.
+    }
+
+    for (const key of candidateKeys) {
+      try {
+        const raw = storage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : [];
+        const candidates = collectViewCandidates(parsed);
+        if (!Array.isArray(candidates) || candidates.length === 0) continue;
+
+        for (const view of candidates) {
+          if (!view || typeof view !== "object") continue;
+          const name = typeof view.name === "string" ? view.name.trim() : "";
+          if (!name) continue;
+
+          const existing = byName.get(name);
+          if (!existing) {
+            byName.set(name, view);
+            continue;
+          }
+
+          const nextSavedAt = Date.parse(view.savedAt || "");
+          const prevSavedAt = Date.parse(existing.savedAt || "");
+          if (Number.isFinite(nextSavedAt) && (!Number.isFinite(prevSavedAt) || nextSavedAt >= prevSavedAt)) {
+            byName.set(name, view);
+          }
+        }
+      } catch {
+        // Ignore malformed storage values.
+      }
+    }
+  }
+
+  return Array.from(byName.values()).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+function refreshExtendedViewsDropdown(selectedName) {
+  if (!els.extendedViews) return;
+  const views = getSavedExtendedViews();
+  const previousSelection = selectedName || els.extendedViews.value;
+  els.extendedViews.innerHTML = "";
+
+  if (views.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "(no extended views found)";
+    els.extendedViews.append(opt);
+    return;
+  }
+
+  for (const view of views) {
+    const opt = document.createElement("option");
+    opt.value = view.name;
+    opt.textContent = view.name;
+    els.extendedViews.append(opt);
+  }
+
+  if (previousSelection && views.some((v) => v.name === previousSelection)) {
+    els.extendedViews.value = previousSelection;
+  } else {
+    els.extendedViews.value = views[0].name;
+  }
+}
+
+function bindExtendedViewRefresh() {
+  if (!els.extendedViews) return;
+
+  const refresh = () => {
+    refreshExtendedViewsDropdown(els.extendedViews.value);
+  };
+
+  window.addEventListener("focus", refresh);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refresh();
+  });
+  window.addEventListener("storage", (event) => {
+    if (!event.key || EXTENDED_VIEW_STORAGE_FALLBACK_KEYS.includes(event.key)) {
+      refresh();
+    }
+  });
+
+  els.extendedViews.addEventListener("pointerdown", refresh);
 }
 
 function stopAnimation() {
@@ -148,13 +304,14 @@ async function animateStepForward() {
 async function setAnimationCoarseLevel(enable) {
   const tasks = [];
   for (let i = 0; i < 3; i++) {
-    const src = state.panels[i].wxsource;
-    if (!src) continue;
-    if (enable && typeof src.setCoarseLevel === "function") {
-      tasks.push(src.setCoarseLevel(2).catch(() => {}));
-    }
-    if (!enable && typeof src.unsetCoarseLevel === "function") {
-      tasks.push(src.unsetCoarseLevel().catch(() => {}));
+    const sources = [state.panels[i].wxsource, state.panels[i].wxsourceSecondary].filter(Boolean);
+    for (const src of sources) {
+      if (enable && typeof src.setCoarseLevel === "function") {
+        tasks.push(src.setCoarseLevel(2).catch(() => {}));
+      }
+      if (!enable && typeof src.unsetCoarseLevel === "function") {
+        tasks.push(src.unsetCoarseLevel().catch(() => {}));
+      }
     }
   }
   await Promise.all(tasks);
@@ -204,6 +361,7 @@ const panels = [
     timeSelect: document.getElementById("timeSelect0"),
     meta: document.getElementById("meta0"),
     values: document.getElementById("values0"),
+    times: document.getElementById("times0"),
     warning: document.getElementById("warning0"),
     map: L.map("map0", { center: [-40.75, 174.5], zoom: 7, worldCopyJump: true, zoomControl: false }),
     legend: document.getElementById("legend0"),
@@ -215,6 +373,7 @@ const panels = [
     timeSelect: document.getElementById("timeSelect1"),
     meta: document.getElementById("meta1"),
     values: document.getElementById("values1"),
+    times: document.getElementById("times1"),
     warning: document.getElementById("warning1"),
     map: L.map("map1", { center: [-40.75, 174.5], zoom: 7, worldCopyJump: true, zoomControl: false }),
     legend: document.getElementById("legend1"),
@@ -226,6 +385,7 @@ const panels = [
     timeSelect: document.getElementById("timeSelect2"),
     meta: document.getElementById("meta2"),
     values: document.getElementById("values2"),
+    times: document.getElementById("times2"),
     warning: document.getElementById("warning2"),
     map: L.map("map2", { center: [-40.75, 174.5], zoom: 7, worldCopyJump: true, zoomControl: false }),
     legend: document.getElementById("legend2"),
@@ -640,11 +800,14 @@ async function reloadPanel(panelIdx, options = {}) {
       panelState.wxsource = undefined;
     }
 
+    const panelStyle = cleanStyle(options.styleOverride || panelState.style || state.currentStyle);
+    panelState.style = panelStyle;
+
     panelState.wxsource = panelState.datasetManager.createSourceLayer(
       {
         variable,
         time: preferredTime || undefined,
-        wxstyle: cleanStyle(state.currentStyle),
+        wxstyle: panelStyle,
       },
       { id: `wxsource-${panelIdx}`, opacity: 0.92, attribution: "WxTiles" },
     );
@@ -665,7 +828,7 @@ async function reloadPanel(panelIdx, options = {}) {
     }
 
     updatePanelMeta(panelIdx);
-    drawPanelLegend(panelIdx, state.currentStyle);
+    drawPanelLegend(panelIdx, panelState.style || state.currentStyle);
   } catch (error) {
     console.error(`Failed to reload panel ${panelIdx}:`, error);
   } finally {
@@ -727,8 +890,16 @@ async function setPanelTime(panelIdx, targetTime) {
   if (panelState.wxsource) {
     try {
       await setSourceTime(panelState.wxsource, targetTime, targetIndex);
+
+      // If a secondary overlay is present, try to keep it aligned to the same target time.
+      if (panelState.wxsourceSecondary) {
+        const secondaryTimes = panelState.wxsourceSecondary.getAllTimes?.() || [];
+        const secondaryIndex = secondaryTimes.indexOf(targetTime);
+        await setSourceTime(panelState.wxsourceSecondary, targetTime, secondaryIndex >= 0 ? secondaryIndex : undefined);
+      }
+
       updatePanelMeta(panelIdx);
-      drawPanelLegend(panelIdx, state.currentStyle);
+      drawPanelLegend(panelIdx, panelState.style || state.currentStyle);
     } catch (error) {
       console.error(`Failed to set time on panel ${panelIdx}:`, error);
       return false;
@@ -780,6 +951,222 @@ async function syncVariableAcrossPanels(sourceIdx, variableName) {
   }
 }
 
+async function syncDatasetAcrossPanels(sourceIdx, datasetName) {
+  for (let j = 0; j < 3; j++) {
+    if (j === sourceIdx) continue;
+    const targetPanel = panels[j];
+    if (targetPanel.dataset.value !== datasetName) {
+      targetPanel.dataset.value = datasetName;
+    }
+    await loadVariablesForDataset(j, datasetName);
+
+    const sourceVariable = panels[sourceIdx].variable.value;
+    if (els.lockVariables.checked && getSelectValues(targetPanel.variable).includes(sourceVariable)) {
+      targetPanel.variable.value = sourceVariable;
+      markSelectAvailability(targetPanel.variable, true);
+      setPanelWarning(j, "variable", "");
+    }
+
+    const sourceTime = panels[sourceIdx].timeSelect.value;
+    await reloadPanel(j, { preferredTime: els.lockTimeSteps.checked ? sourceTime : targetPanel.timeSelect.value });
+    if (els.lockTimeSteps.checked) {
+      await setPanelTime(j, sourceTime);
+    }
+  }
+}
+
+async function applyExtendedLayerToPanel(panelIdx, layerConfig) {
+  if (!layerConfig) return;
+  const panel = panels[panelIdx];
+  const panelState = state.panels[panelIdx];
+  const dataset = layerConfig.dataset || panel.dataset.value;
+  panel.dataset.value = dataset;
+  await loadVariablesForDataset(panelIdx, dataset);
+
+  const availableVariables = getSelectValues(panel.variable);
+  if (layerConfig.variable && availableVariables.includes(layerConfig.variable)) {
+    panel.variable.value = layerConfig.variable;
+    markSelectAvailability(panel.variable, true);
+    setPanelWarning(panelIdx, "variable", "");
+  }
+
+  if (typeof layerConfig.opacity === "number") {
+    panelState.wxsource?.setOpacity?.(layerConfig.opacity);
+  }
+
+  const preferredTime = layerConfig.time || panel.timeSelect.value;
+  await reloadPanel(panelIdx, { preferredTime, styleOverride: layerConfig.style });
+  if (layerConfig.time) {
+    await setPanelTime(panelIdx, layerConfig.time);
+  }
+
+  if (typeof layerConfig.opacity === "number" && panelState.wxsource?.setOpacity) {
+    panelState.wxsource.setOpacity(layerConfig.opacity);
+  }
+}
+
+async function clearSecondaryOverlay(panelIdx) {
+  const panel = panels[panelIdx];
+  const panelState = state.panels[panelIdx];
+  if (panelState.wxsourceSecondary && panel.map.hasLayer(panelState.wxsourceSecondary)) {
+    panel.map.removeLayer(panelState.wxsourceSecondary);
+  }
+  panelState.wxsourceSecondary = undefined;
+  panelState.secondaryDatasetManager = undefined;
+}
+
+async function applyExtendedSecondaryOverlayToPanel(panelIdx, layerConfig) {
+  const panel = panels[panelIdx];
+  const panelState = state.panels[panelIdx];
+  await clearSecondaryOverlay(panelIdx);
+
+  if (!layerConfig?.dataset || !layerConfig?.variable) return;
+
+  panelState.secondaryDatasetManager = await state.wxapi.createDatasetManager(layerConfig.dataset);
+  const secondaryStyle = cleanStyle(layerConfig.style || panelState.secondaryStyle || DEFAULT_STYLE);
+  panelState.secondaryStyle = secondaryStyle;
+
+  panelState.wxsourceSecondary = panelState.secondaryDatasetManager.createSourceLayer(
+    {
+      variable: layerConfig.variable,
+      time: layerConfig.time || undefined,
+      wxstyle: secondaryStyle,
+    },
+    {
+      id: `wxsource-${panelIdx}-secondary`,
+      opacity: typeof layerConfig.opacity === "number" ? layerConfig.opacity : 0.65,
+      zIndex: 360,
+      attribution: "WxTiles",
+    },
+  );
+
+  panel.map.addLayer(panelState.wxsourceSecondary);
+  await new Promise((resolve) => panelState.wxsourceSecondary.once("load", resolve));
+
+  if (layerConfig.time) {
+    const allTimes = panelState.wxsourceSecondary.getAllTimes?.() || [];
+    const targetIndex = allTimes.indexOf(layerConfig.time);
+    await setSourceTime(panelState.wxsourceSecondary, layerConfig.time, targetIndex);
+  }
+
+  if (panelState.wxsource && typeof panelState.wxsource.bringToFront === "function") {
+    panelState.wxsource.bringToFront();
+  }
+  if (panelState.wxsourceSecondary && typeof panelState.wxsourceSecondary.bringToFront === "function") {
+    panelState.wxsourceSecondary.bringToFront();
+  }
+}
+
+function normalizeExtendedStyle(styleCandidate) {
+  if (!styleCandidate || typeof styleCandidate !== "object") return undefined;
+  return cleanStyle({ ...DEFAULT_STYLE, ...styleCandidate });
+}
+
+function extractExtendedStyle(layerView, view, layerKey) {
+  if (!layerView || typeof layerView !== "object") {
+    return normalizeExtendedStyle(layerKey === "A" ? view?.styleA || view?.style : view?.styleB || view?.styleA || view?.style);
+  }
+
+  return normalizeExtendedStyle(
+    layerView.style ||
+    layerView.wxstyle ||
+    layerView.customStyle ||
+    layerView.styleObject ||
+    (layerKey === "A" ? view?.styleA || view?.style : view?.styleB || view?.styleA || view?.style),
+  );
+}
+
+function extractExtendedLayerView(view, layerKey) {
+  const layers = view?.layers;
+  if (layers && typeof layers === "object") {
+    if (layers[layerKey]) return layers[layerKey];
+    if (layers[layerKey.toLowerCase()]) return layers[layerKey.toLowerCase()];
+  }
+
+  const directKey = layerKey === "A" ? "layerA" : "layerB";
+  if (view?.[directKey] && typeof view[directKey] === "object") {
+    return view[directKey];
+  }
+
+  return {};
+}
+
+async function applyStyleToPanel(panelIdx, styleObject) {
+  const panelState = state.panels[panelIdx];
+  if (!panelState.wxsource || !styleObject) return;
+
+  const style = cleanStyle(styleObject);
+  panelState.style = style;
+  await panelState.wxsource.updateCurrentStyleObject(style, true);
+  updatePanelMeta(panelIdx);
+  drawPanelLegend(panelIdx, style);
+}
+
+async function applySecondaryStyleToPanel(panelIdx, styleObject) {
+  const panelState = state.panels[panelIdx];
+  if (!panelState.wxsourceSecondary || !styleObject) return;
+
+  const style = cleanStyle(styleObject);
+  panelState.secondaryStyle = style;
+  await panelState.wxsourceSecondary.updateCurrentStyleObject(style, true);
+}
+
+async function loadExtendedViewByName(viewName) {
+  const name = (viewName || "").trim();
+  if (!name) return;
+
+  const view = getSavedExtendedViews().find((v) => v.name === name);
+  if (!view) return;
+
+  stopAnimation();
+
+  const layerAView = extractExtendedLayerView(view, "A");
+  const layerBView = extractExtendedLayerView(view, "B");
+  const datasetA = view.dataset || view.datasetA || panels[0].dataset.value;
+  const datasetB = view.datasetB && view.datasetB !== "__same__" ? view.datasetB : datasetA;
+  const styleA = extractExtendedStyle(layerAView, view, "A");
+  const styleB = extractExtendedStyle(layerBView, view, "B") || styleA;
+
+  // Overlay A (primary) in all panes.
+  for (let i = 0; i < 3; i++) {
+    await applyExtendedLayerToPanel(i, {
+      dataset: datasetA,
+      variable: layerAView.variable,
+      time: layerAView.time,
+      opacity: layerAView.opacity,
+      style: styleA,
+    });
+  }
+
+  // Overlay B (secondary) in all panes.
+  for (let i = 0; i < 3; i++) {
+    await applyExtendedSecondaryOverlayToPanel(i, {
+      dataset: datasetB,
+      variable: layerBView.variable,
+      time: layerBView.time,
+      opacity: layerBView.opacity,
+      style: styleB,
+    });
+  }
+
+  if (styleA || styleB) {
+    for (let i = 0; i < 3; i++) {
+      if (styleA) {
+        await applyStyleToPanel(i, styleA);
+      }
+      if (styleB) {
+        await applySecondaryStyleToPanel(i, styleB);
+      }
+    }
+
+    state.currentStyle = styleA || styleB || structuredClone(DEFAULT_STYLE);
+    writeStyleToControls(state.currentStyle);
+    updateStyleJson();
+  }
+
+  console.info(`Loaded Extended view in Compare (A+B in all panes): ${name}`);
+}
+
 function syncMapView(sourceIdx) {
   if (state.syncingView) return;
   state.syncingView = true;
@@ -796,6 +1183,19 @@ function syncMapView(sourceIdx) {
   }
 }
 
+function formatUtcTime(isoString) {
+  if (!isoString) return "";
+  try {
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return isoString;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
+      `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+  } catch {
+    return isoString;
+  }
+}
+
 function updatePanelMeta(panelIdx) {
   const panelState = state.panels[panelIdx];
   const panel = panels[panelIdx];
@@ -804,9 +1204,21 @@ function updatePanelMeta(panelIdx) {
   const meta = panelState.wxsource.getCurrentVariableMeta();
   const datasetName = panelState.wxsource.wxdatasetManager.datasetName;
   const time = panelState.wxsource.getTime();
-  const units = meta.units || state.currentStyle.units || "";
+  const units = meta.units || panelState.style?.units || state.currentStyle.units || "";
 
-  panel.meta.textContent = `dataset=${datasetName} variable=${panel.variable.value} time=${time} min=${meta.min?.toFixed(2)} max=${meta.max?.toFixed(2)} ${units}`;
+  panel.meta.textContent = `dataset=${datasetName} variable=${panel.variable.value} min=${meta.min?.toFixed(2)} max=${meta.max?.toFixed(2)} ${units}`;
+
+  // Build per-overlay UTC time row.
+  if (panel.times) {
+    const timeA = formatUtcTime(time);
+    const secondaryTime = panelState.wxsourceSecondary?.getTime?.();
+    if (secondaryTime) {
+      const timeB = formatUtcTime(secondaryTime);
+      panel.times.textContent = `A: ${timeA}  |  B: ${timeB}`;
+    } else {
+      panel.times.textContent = timeA ? `${timeA}` : "";
+    }
+  }
 
   if (!panelState.wxsource) {
     panel.values.textContent = "style=outside source=outside";
@@ -834,6 +1246,7 @@ async function applyStyleToAllPanels() {
     const panelState = state.panels[i];
     if (!panelState.wxsource) continue;
     try {
+      panelState.style = cleanStyle(state.currentStyle);
       await panelState.wxsource.updateCurrentStyleObject(cleanStyle(state.currentStyle), true);
       updatePanelMeta(i);
     } catch (error) {
@@ -859,9 +1272,16 @@ async function initialize() {
     await loadVariablesForDataset(i, panels[i].dataset.value);
     await reloadPanel(i);
   }
+
+  refreshExtendedViewsDropdown();
+  bindExtendedViewRefresh();
 }
 
 function bindEvents() {
+  els.lockDatasets.addEventListener("change", () => {
+    state.lockDatasets = els.lockDatasets.checked;
+  });
+
   els.lockVariables.addEventListener("change", () => {
     state.lockVariables = els.lockVariables.checked;
   });
@@ -879,7 +1299,31 @@ function bindEvents() {
         await loadVariablesForDataset(panelIdx, panel.dataset.value);
         markSelectAvailability(panel.variable, true);
         setPanelWarning(panelIdx, "variable", "");
-        await reloadPanel(panelIdx, { preferredTime: panel.timeSelect.value });
+        // Preserve the pane's imported style when switching datasets.
+        const preservedStyle = state.panels[panelIdx].style;
+        const preservedSecondary = {
+          source: state.panels[panelIdx].wxsourceSecondary,
+          manager: state.panels[panelIdx].secondaryDatasetManager,
+          style: state.panels[panelIdx].secondaryStyle,
+        };
+        await reloadPanel(panelIdx, { preferredTime: panel.timeSelect.value, styleOverride: preservedStyle });
+        // Re-attach secondary overlay if one was present.
+        if (preservedSecondary.source && preservedSecondary.manager) {
+          const ps = state.panels[panelIdx];
+          ps.secondaryDatasetManager = preservedSecondary.manager;
+          ps.secondaryStyle = preservedSecondary.style;
+          if (!panel.map.hasLayer(preservedSecondary.source)) {
+            panel.map.addLayer(preservedSecondary.source);
+          }
+          ps.wxsourceSecondary = preservedSecondary.source;
+          if (ps.wxsource && typeof ps.wxsource.bringToFront === "function") ps.wxsource.bringToFront();
+          if (ps.wxsourceSecondary && typeof ps.wxsourceSecondary.bringToFront === "function") ps.wxsourceSecondary.bringToFront();
+        }
+
+        if (els.lockDatasets.checked) {
+          await syncDatasetAcrossPanels(panelIdx, panel.dataset.value);
+          return;
+        }
 
         if (els.lockVariables.checked) {
           await syncVariableAcrossPanels(panelIdx, panel.variable.value);
@@ -893,7 +1337,26 @@ function bindEvents() {
         stopAnimation();
         markSelectAvailability(panel.variable, true);
         setPanelWarning(panelIdx, "variable", "");
-        await reloadPanel(panelIdx, { preferredTime: panel.timeSelect.value });
+        // Preserve the pane's imported style when switching variables.
+        const preservedStyle = state.panels[panelIdx].style;
+        const preservedSecondary = {
+          source: state.panels[panelIdx].wxsourceSecondary,
+          manager: state.panels[panelIdx].secondaryDatasetManager,
+          style: state.panels[panelIdx].secondaryStyle,
+        };
+        await reloadPanel(panelIdx, { preferredTime: panel.timeSelect.value, styleOverride: preservedStyle });
+        // Re-attach secondary overlay if one was present.
+        if (preservedSecondary.source && preservedSecondary.manager) {
+          const ps = state.panels[panelIdx];
+          ps.secondaryDatasetManager = preservedSecondary.manager;
+          ps.secondaryStyle = preservedSecondary.style;
+          if (!panel.map.hasLayer(preservedSecondary.source)) {
+            panel.map.addLayer(preservedSecondary.source);
+          }
+          ps.wxsourceSecondary = preservedSecondary.source;
+          if (ps.wxsource && typeof ps.wxsource.bringToFront === "function") ps.wxsource.bringToFront();
+          if (ps.wxsourceSecondary && typeof ps.wxsourceSecondary.bringToFront === "function") ps.wxsourceSecondary.bringToFront();
+        }
 
         if (els.lockVariables.checked) {
           await syncVariableAcrossPanels(panelIdx, panel.variable.value);
@@ -939,6 +1402,13 @@ function bindEvents() {
   els.playBtn.addEventListener("click", () => {
     toggleAnimation();
   });
+
+  if (els.loadExtendedViewBtn) {
+    els.loadExtendedViewBtn.addEventListener("click", () => {
+      refreshExtendedViewsDropdown(els.extendedViews.value);
+      void loadExtendedViewByName(els.extendedViews.value);
+    });
+  }
 
   els.animationSpeedPreset.addEventListener("change", () => {
     state.animationSpeedPreset = els.animationSpeedPreset.value || "normal";
