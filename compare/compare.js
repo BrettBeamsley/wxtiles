@@ -113,6 +113,7 @@ const state = {
   animating: false,
   animationRunId: 0,
   animationSpeedPreset: "normal",
+  linkedOverlayDatasets: false,
   panels: [
     {
       wxsource: undefined,
@@ -121,6 +122,8 @@ const state = {
       secondaryDatasetManager: undefined,
       style: structuredClone(DEFAULT_STYLE),
       secondaryStyle: structuredClone(DEFAULT_STYLE),
+      secondaryVariable: "",
+      secondaryOpacity: 0.65,
       cursorLatLng: L.latLng(0, 0),
       busy: false,
       warnings: { variable: "", time: "" },
@@ -132,6 +135,8 @@ const state = {
       secondaryDatasetManager: undefined,
       style: structuredClone(DEFAULT_STYLE),
       secondaryStyle: structuredClone(DEFAULT_STYLE),
+      secondaryVariable: "",
+      secondaryOpacity: 0.65,
       cursorLatLng: L.latLng(0, 0),
       busy: false,
       warnings: { variable: "", time: "" },
@@ -143,6 +148,8 @@ const state = {
       secondaryDatasetManager: undefined,
       style: structuredClone(DEFAULT_STYLE),
       secondaryStyle: structuredClone(DEFAULT_STYLE),
+      secondaryVariable: "",
+      secondaryOpacity: 0.65,
       cursorLatLng: L.latLng(0, 0),
       busy: false,
       warnings: { variable: "", time: "" },
@@ -969,6 +976,7 @@ async function syncDatasetAcrossPanels(sourceIdx, datasetName) {
 
     const sourceTime = panels[sourceIdx].timeSelect.value;
     await reloadPanel(j, { preferredTime: els.lockTimeSteps.checked ? sourceTime : targetPanel.timeSelect.value });
+    await syncSecondaryOverlayForDataset(j, datasetName);
     if (els.lockTimeSteps.checked) {
       await setPanelTime(j, sourceTime);
     }
@@ -1013,6 +1021,7 @@ async function clearSecondaryOverlay(panelIdx) {
   }
   panelState.wxsourceSecondary = undefined;
   panelState.secondaryDatasetManager = undefined;
+  panelState.secondaryVariable = "";
 }
 
 async function applyExtendedSecondaryOverlayToPanel(panelIdx, layerConfig) {
@@ -1025,6 +1034,8 @@ async function applyExtendedSecondaryOverlayToPanel(panelIdx, layerConfig) {
   panelState.secondaryDatasetManager = await state.wxapi.createDatasetManager(layerConfig.dataset);
   const secondaryStyle = cleanStyle(layerConfig.style || panelState.secondaryStyle || DEFAULT_STYLE);
   panelState.secondaryStyle = secondaryStyle;
+  panelState.secondaryVariable = layerConfig.variable || panelState.secondaryVariable || "";
+  panelState.secondaryOpacity = typeof layerConfig.opacity === "number" ? layerConfig.opacity : (panelState.secondaryOpacity ?? 0.65);
 
   panelState.wxsourceSecondary = panelState.secondaryDatasetManager.createSourceLayer(
     {
@@ -1034,7 +1045,7 @@ async function applyExtendedSecondaryOverlayToPanel(panelIdx, layerConfig) {
     },
     {
       id: `wxsource-${panelIdx}-secondary`,
-      opacity: typeof layerConfig.opacity === "number" ? layerConfig.opacity : 0.65,
+      opacity: panelState.secondaryOpacity,
       zIndex: 360,
       attribution: "WxTiles",
     },
@@ -1055,6 +1066,32 @@ async function applyExtendedSecondaryOverlayToPanel(panelIdx, layerConfig) {
   if (panelState.wxsourceSecondary && typeof panelState.wxsourceSecondary.bringToFront === "function") {
     panelState.wxsourceSecondary.bringToFront();
   }
+}
+
+async function syncSecondaryOverlayForDataset(panelIdx, nextDataset) {
+  if (!state.linkedOverlayDatasets) return;
+
+  const panel = panels[panelIdx];
+  const panelState = state.panels[panelIdx];
+  if (!panelState.wxsourceSecondary) return;
+
+  const availableVariables = await state.wxapi.getDatasetAllVariables(nextDataset);
+  if (!Array.isArray(availableVariables) || availableVariables.length === 0) {
+    await clearSecondaryOverlay(panelIdx);
+    return;
+  }
+
+  const preferredSecondaryVariable = panelState.secondaryVariable || panel.variable.value;
+  const secondaryVariable = availableVariables.includes(preferredSecondaryVariable)
+    ? preferredSecondaryVariable
+    : (availableVariables.includes(panel.variable.value) ? panel.variable.value : availableVariables[0]);
+
+  await applyExtendedSecondaryOverlayToPanel(panelIdx, {
+    dataset: nextDataset,
+    variable: secondaryVariable,
+    opacity: panelState.secondaryOpacity,
+    style: panelState.secondaryStyle,
+  });
 }
 
 function normalizeExtendedStyle(styleCandidate) {
@@ -1148,6 +1185,8 @@ async function loadExtendedViewByName(viewName) {
       style: styleB,
     });
   }
+
+  state.linkedOverlayDatasets = datasetA === datasetB;
 
   if (styleA || styleB) {
     for (let i = 0; i < 3; i++) {
@@ -1307,8 +1346,11 @@ function bindEvents() {
           style: state.panels[panelIdx].secondaryStyle,
         };
         await reloadPanel(panelIdx, { preferredTime: panel.timeSelect.value, styleOverride: preservedStyle });
-        // Re-attach secondary overlay if one was present.
-        if (preservedSecondary.source && preservedSecondary.manager) {
+        // If loaded style uses same dataset for A/B, keep B aligned to new dataset.
+        if (state.linkedOverlayDatasets) {
+          await syncSecondaryOverlayForDataset(panelIdx, panel.dataset.value);
+        } else if (preservedSecondary.source && preservedSecondary.manager) {
+          // Otherwise keep B as-is (e.g. obs overlay on a different dataset).
           const ps = state.panels[panelIdx];
           ps.secondaryDatasetManager = preservedSecondary.manager;
           ps.secondaryStyle = preservedSecondary.style;
