@@ -52,9 +52,9 @@ This keeps your local version unchanged while making an online version available
 - The weather layer uses `https://tiles.metoceanapi.com/data/`.
 - If your environment requires an API key, update `main.js` and pass custom request headers to `WxAPI`.
 
-## GPX Route Analysis Workbook
+## GPX Route Analysis Workbook Tool
 
-This workspace also includes a GPX-to-Excel utility for route logistics planning.
+This workspace includes a standalone GPX route analysis and POI enrichment tool that creates a print-ready `.xlsx` workbook for bikepacking, touring, and hiking route logistics.
 
 ### Install dependencies
 
@@ -65,25 +65,35 @@ pip install -r tools/requirements-gpx.txt
 ### Generate workbook
 
 ```bash
-python tools/gpx_route_analysis.py path/to/route.gpx -o route_analysis.xlsx --enrich --nominatim-email you@example.com
+python tools/gpx_poi_workbook_tool.py path/to/route.gpx -o route_poi_workbook.xlsx --enrich --nominatim-email you@example.com
 ```
 
-### Output
+Optional Google Places enrichment:
 
-The workbook contains:
+```bash
+python tools/gpx_poi_workbook_tool.py path/to/route.gpx -o route_poi_workbook.xlsx --enrich --google-places-key <YOUR_KEY>
+```
+
+### Workbook sheets
 
 - `Route Summary`
 - `POI Master Table`
 - `Daily Planning View`
 - `Research Sources`
 
-Rules implemented in the workbook:
+### What is calculated
 
-- Route distances are measured along GPX track/route geometry.
-- Elevation gain/loss is calculated from the GPX profile.
-- Distances are rounded to 0.1 km, elevations to nearest metre, coordinates to 6 decimals.
-- Header rows are frozen and all data tables have filters enabled.
-- Landscape print layout with repeating headers.
-- Conditional formatting highlights Food, Accommodation, Water, Medical, and Emergency rows.
+- Cumulative distance along the GPX route geometry.
+- Distance between POIs in route order.
+- Elevation gain/loss between POI segments from track profile.
+- POI snapping to nearest route position.
 
-When online enrichment is unavailable or unverified, fields are marked `Not confirmed`.
+### Formatting and print features
+
+- Auto-filter on all sheet tables.
+- Frozen header rows.
+- Auto-sized columns.
+- Conditional formatting for Food, Accommodation, Water, Medical, and Emergency categories.
+- Landscape layout with repeating header rows for print.
+
+If a field cannot be verified from available sources, the tool leaves it blank and records uncertainty in notes/source sheets.
