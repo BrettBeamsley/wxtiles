@@ -51,3 +51,39 @@ This keeps your local version unchanged while making an online version available
 
 - The weather layer uses `https://tiles.metoceanapi.com/data/`.
 - If your environment requires an API key, update `main.js` and pass custom request headers to `WxAPI`.
+
+## GPX Route Analysis Workbook
+
+This workspace also includes a GPX-to-Excel utility for route logistics planning.
+
+### Install dependencies
+
+```bash
+pip install -r tools/requirements-gpx.txt
+```
+
+### Generate workbook
+
+```bash
+python tools/gpx_route_analysis.py path/to/route.gpx -o route_analysis.xlsx --enrich --nominatim-email you@example.com
+```
+
+### Output
+
+The workbook contains:
+
+- `Route Summary`
+- `POI Master Table`
+- `Daily Planning View`
+- `Research Sources`
+
+Rules implemented in the workbook:
+
+- Route distances are measured along GPX track/route geometry.
+- Elevation gain/loss is calculated from the GPX profile.
+- Distances are rounded to 0.1 km, elevations to nearest metre, coordinates to 6 decimals.
+- Header rows are frozen and all data tables have filters enabled.
+- Landscape print layout with repeating headers.
+- Conditional formatting highlights Food, Accommodation, Water, Medical, and Emergency rows.
+
+When online enrichment is unavailable or unverified, fields are marked `Not confirmed`.
