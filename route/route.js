@@ -1101,6 +1101,37 @@ async function captureMapImage() {
     mapCanvas.height = 400;
     const ctx = mapCanvas.getContext('2d');
     
+    console.log('[MapCapture] Starting basemap drawing to 800x400 canvas');
+    
+    // IMPORTANT: Draw basemap FIRST before anything else
+    // Draw background (ocean/land colors)
+    ctx.fillStyle = '#e8f1f8'; // Light blue water
+    console.log('[MapCapture] fillStyle set to #e8f1f8');
+    ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+    console.log('[MapCapture] Drew light blue background (0,0,800,400)');
+    
+    // Add subtle land masses 
+    ctx.fillStyle = '#f0ede0'; // Tan land
+    console.log('[MapCapture] fillStyle set to #f0ede0');
+    ctx.fillRect(0, mapCanvas.height * 0.6, mapCanvas.width * 0.3, mapCanvas.height * 0.4);
+    console.log('[MapCapture] Drew tan land rectangle (0,240,240,160)');
+    
+    // Draw subtle grid/graticule
+    ctx.strokeStyle = 'rgba(150, 170, 200, 0.2)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= 10; i++) {
+      const x = (i / 10) * mapCanvas.width;
+      const y = (i / 10) * mapCanvas.height;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, mapCanvas.height);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(mapCanvas.width, y);
+      ctx.stroke();
+    }
+    
     // Calculate bounds of all waypoints
     let minLat = state.waypoints[0].lat;
     let maxLat = state.waypoints[0].lat;
@@ -1121,33 +1152,6 @@ async function captureMapImage() {
     maxLat += latPadding;
     minLng -= lngPadding;
     maxLng += lngPadding;
-    
-    // Draw basemap background (ocean/land colors)
-    ctx.fillStyle = '#e8f1f8'; // Light blue water
-    ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
-    
-    // Add subtle land masses (light tan for continental areas based on typical coordinates)
-    ctx.fillStyle = '#f0ede0';
-    // Note: This is a simplified representation. A proper hydrographic chart would need actual geodata
-    ctx.fillRect(0, mapCanvas.height * 0.6, mapCanvas.width * 0.3, mapCanvas.height * 0.4);
-    
-    // Draw subtle grid/graticule
-    ctx.strokeStyle = 'rgba(150, 170, 200, 0.2)';
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= 10; i++) {
-      const x = (i / 10) * mapCanvas.width;
-      const y = (i / 10) * mapCanvas.height;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, mapCanvas.height);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(mapCanvas.width, y);
-      ctx.stroke();
-    }
-    
-    // Helper to convert lat/lng to canvas coordinates
     const toCanvasCoord = (lat, lng) => {
       const x = ((lng - minLng) / (maxLng - minLng)) * (mapCanvas.width - 40) + 20;
       const y = mapCanvas.height - 20 - ((lat - minLat) / (maxLat - minLat)) * (mapCanvas.height - 40);
@@ -1227,7 +1231,9 @@ async function captureMapImage() {
     ctx.fillText('Route Map & Waypoint Locations', mapCanvas.width / 2, 25);
     
     // Return as data URL
-    return mapCanvas.toDataURL('image/png');
+    const dataUrl = mapCanvas.toDataURL('image/png');
+    console.log('[MapCapture] Generated PNG data URL, length:', dataUrl.length);
+    return dataUrl;
   } catch (e) {
     console.error('Map capture failed:', e);
     return null;
@@ -1401,9 +1407,12 @@ async function exportPdf() {
   
   try {
     const mapImg = await captureMapImage();
+    console.log('[ExportPDF] Map image received, type:', typeof mapImg, 'value exists:', !!mapImg);
     if (mapImg) {
+      console.log('[ExportPDF] Adding map image to PDF at position y=', y);
       const mapH = 60;
       doc.addImage(mapImg, "PNG", margin, y, contentW, mapH);
+      console.log('[ExportPDF] Map image added successfully');
       y += mapH + 6;
       
       // Map legend
@@ -1415,6 +1424,8 @@ async function exportPdf() {
         doc.text(line, margin+4, y + 2.5 + idx*3.5);
       });
       y += 14;
+    } else {
+      console.error('[ExportPDF] mapImg is null/undefined!');
     }
   } catch(e) { 
     console.error("Map section failed:", e); 
@@ -1547,8 +1558,10 @@ async function exportPdf() {
   
   // Calculate content and box dimensions
   const hasSimulated = state.checkpoints.some(c=>c.isSimulated);
-  const noteWidth = contentW - 8;
-  const lineHeight = 3.0;
+  const noteWidth = contentW - 8;  // Available width for text
+  const lineHeight = 2.8;  // Reduced from 3.0 to fit better
+  const topPadding = 7;    // Space for title
+  const bottomPadding = 3; // Space at bottom
   
   // Wrap main note text
   const mainNoteText = "Wave and wind data sourced from MetOcean WxTiles API. Forecasts are model-derived estimates and should not be used as the sole navigational authority. Always cross-reference with official maritime forecasts and warnings from MetService New Zealand.";
@@ -1561,38 +1574,50 @@ async function exportPdf() {
     simNoteLines = doc.splitTextToSize(simNoteText, noteWidth);
   }
   
-  // Calculate total box height needed
-  const headerHeight = 6.5;
+  // Calculate total box height needed with safety margin
   const mainNoteHeight = mainNoteLines.length * lineHeight;
-  const spaceBetween = hasSimulated ? 2 : 0;
+  const spaceBetween = hasSimulated ? 1.5 : 0;
   const simNoteHeight = simNoteLines.length * lineHeight;
-  const totalBoxHeight = headerHeight + mainNoteHeight + spaceBetween + simNoteHeight + 4;
+  const totalBoxHeight = topPadding + mainNoteHeight + spaceBetween + simNoteHeight + bottomPadding;
+  
+  // Ensure there's enough space, otherwise add new page
+  if (y + totalBoxHeight > H - 15) {
+    doc.addPage();
+    y = margin;
+  }
   
   // Draw orange warning box
-  doc.setFillColor(255, 250, 240); doc.roundedRect(margin, y, contentW, totalBoxHeight, 2, 2, "F");
-  doc.setDrawColor(240, 150, 30); doc.setLineWidth(0.5); doc.roundedRect(margin, y, contentW, totalBoxHeight, 2, 2, "S");
+  doc.setFillColor(255, 250, 240);
+  doc.roundedRect(margin, y, contentW, totalBoxHeight, 2, 2, "F");
+  doc.setDrawColor(240, 150, 30);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(margin, y, contentW, totalBoxHeight, 2, 2, "S");
   
   // Draw title
-  doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(200, 100, 0);
-  doc.text("⚠  DATA NOTES & QUALITY INFORMATION", margin+4, y+6.5);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(200, 100, 0);
+  doc.text("⚠  DATA NOTES & QUALITY INFORMATION", margin + 4, y + 6);
   
-  // Draw main note text - all lines
-  doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(80,55,0);
-  let noteY = y + 11.5;
+  // Draw main note text - all wrapped lines
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(80, 55, 0);
+  let noteY = y + topPadding + 1;
   mainNoteLines.forEach((line, idx) => {
-    doc.text(line, margin+4, noteY + idx * lineHeight);
+    doc.text(line, margin + 4, noteY + idx * lineHeight);
   });
   
-  // Draw simulated data note if applicable - all lines
+  // Draw simulated data note if applicable - all wrapped lines
   if (hasSimulated) {
     noteY += mainNoteLines.length * lineHeight + spaceBetween;
-    doc.setTextColor(160,80,0);
+    doc.setTextColor(160, 80, 0);
     simNoteLines.forEach((line, idx) => {
-      doc.text(line, margin+4, noteY + idx * lineHeight);
+      doc.text(line, margin + 4, noteY + idx * lineHeight);
     });
   }
   
-  y+= totalBoxHeight + 6;
+  y += totalBoxHeight + 6;
 
   // ── FOOTER ────────────────────────────────────────────────────────────────
   const pageCount = doc.getNumberOfPages();

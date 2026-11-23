@@ -22,6 +22,7 @@ python -m http.server 8080
 
 Then open `http://localhost:8080` (portal landing page).
 
+- Route forecast explorer: `http://localhost:8080/route/`
 - Main explorer: `http://localhost:8080/main/`
 - Main explorer extended: `http://localhost:8080/main-extended/`
 - Threshold explorer: `http://localhost:8080/threshold/`
@@ -40,12 +41,35 @@ This repo now includes a Pages deployment workflow at `.github/workflows/deploy-
 After deployment, your URLs will be:
 
 - Portal landing: `https://<your-user-or-org>.github.io/<repo>/`
+- Route forecast explorer: `https://<your-user-or-org>.github.io/<repo>/route/`
 - Main explorer: `https://<your-user-or-org>.github.io/<repo>/main/`
 - Main explorer extended: `https://<your-user-or-org>.github.io/<repo>/main-extended/`
 - Threshold explorer: `https://<your-user-or-org>.github.io/<repo>/threshold/`
 - Compare explorer: `https://<your-user-or-org>.github.io/<repo>/compare/`
 
 This keeps your local version unchanged while making an online version available.
+
+## Route Forecast Explorer
+
+The Route Forecast Explorer (`/route/`) provides interactive route planning and meteorological/oceanographic voyage forecasting:
+
+- **GUI Route Definition**:
+  - Click on the Leaflet map to add and drag waypoints.
+  - Interactive route metrics: total distance (in nautical miles and kilometers), transit duration, and arrival times (ETA in UTC and Local).
+  - Preloaded sample passages (e.g. Cook Strait, Hauraki Gulf, English Channel).
+  - Client-side GPX / GeoJSON route import and export.
+- **Speed & Unit Flexibility**:
+  - Set vessel/craft speed in `knots`, `km/h`, or `m/s` with instantaneous conversion and ETA recalculation.
+  - Configurable departure date and time with quick offset buttons (`Now`, `+6h`, `+12h`, `+24h`).
+- **Along-Track Weather & Marine Forecast**:
+  - Discretizes the route into checkpoints based on speed and leg distances.
+  - Correlates each checkpoint's time of passage with the nearest WxTiles forecast timesteps.
+  - Samples Significant Wave Height ($H_s$), 10m Wind Speed, and Wind Direction.
+  - Computes relative wind angle (Headwind, Beam Reach, Crosswind, Tailwind) based on vessel heading.
+- **Visual Profile & Reporting**:
+  - High-DPI canvas along-route profile chart with dual Y-axes (Wave Height & Wind Speed) and relative wind direction arrows.
+  - Interactive hover scrubber synchronizing the chart position with a live marker on the Leaflet map.
+  - Detailed checkpoint data table and 1-click CSV export.
 
 ## Notes
 

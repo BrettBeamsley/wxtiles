@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Canvas Basemap Test</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <button onclick="testBasemap()">Test Basemap</button>
+  <div id="result"></div>
+  
+  <script>
+    function testBasemap() {
+      // Create canvas with basemap
+      const canvas = document.createElement('canvas');
+      canvas.width = 800;
+      canvas.height = 400;
+      const ctx = canvas.getContext('2d');
+      
+      // Draw basemap
+      ctx.fillStyle = '#e8f1f8';
+      ctx.fillRect(0, 0, 800, 400);
+      
+      ctx.fillStyle = '#f0ede0';
+      ctx.fillRect(0, 240, 240, 160);
+      
+      ctx.fillStyle = '#22c55e';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(100, 100);
+      ctx.lineTo(400, 200);
+      ctx.lineTo(700, 150);
+      ctx.stroke();
+      
+      // Get PNG
+      const dataUrl = canvas.toDataURL('image/png');
+      
+      // Create PDF
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.addImage(dataUrl, 'PNG', 10, 10, 190, 100);
+      doc.save('test-basemap.pdf');
+      
+      document.getElementById('result').textContent = 'PDF saved! Check downloads folder.';
+    }
+  </script>
+</body>
+</html>

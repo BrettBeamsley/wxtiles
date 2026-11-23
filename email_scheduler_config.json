@@ -1,0 +1,20 @@
+{
+  "enabled": false,
+  "schedule": [
+    "06:00",
+    "12:00",
+    "18:00",
+    "00:00"
+  ],
+  "recipient_email": "your-email@metservice.co.nz",
+  "sender_email": "wxtiles-reports@metservice.co.nz",
+  "sender_password": "YOUR_PASSWORD_HERE",
+  "smtp_server": "mail.metservice.co.nz",
+  "smtp_port": 587,
+  "route_waypoints": [
+    {"lat": -41.286, "lng": 174.55, "name": "Start"},
+    {"lat": -41.286, "lng": 175.55, "name": "End"}
+  ],
+  "vessel_speed_knots": 10,
+  "pdf_title": "Route Forecast Report"
+}
