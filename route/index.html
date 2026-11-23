@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WxTiles Route Forecast Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient-shape shape-a"></div>
+    <div class="ambient-shape shape-b"></div>
+
+    <div class="app-layout">
+      <!-- Top Navigation & Summary Bar -->
+      <header class="top-nav">
+        <div class="nav-left">
+          <a href="../" class="nav-back-link" title="Return to Portal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            <span>All Explorers</span>
+          </a>
+          <span class="nav-divider">/</span>
+          <h1 class="nav-title">Route Forecast Explorer</h1>
+          <span class="badge badge-marine">Marine & Weather</span>
+        </div>
+
+        <div class="nav-right" id="navMetricsBar">
+          <div class="metric-chip">
+            <span class="metric-label">Route Dist</span>
+            <span class="metric-value mono" id="metricDistance">0.0 nm</span>
+          </div>
+          <div class="metric-chip">
+            <span class="metric-label">Est Duration</span>
+            <span class="metric-value mono" id="metricDuration">0h 00m</span>
+          </div>
+          <div class="metric-chip">
+            <span class="metric-label">ETA (UTC)</span>
+            <span class="metric-value mono" id="metricEta">--:--</span>
+          </div>
+          <div class="metric-chip">
+            <span class="metric-label">Max Wave</span>
+            <span class="metric-value mono" id="metricMaxWave">--</span>
+          </div>
+          <div class="metric-chip">
+            <span class="metric-label">Max Wind</span>
+            <span class="metric-value mono" id="metricMaxWind">--</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Workspace: Sidebar + Map + Bottom Forecast Drawer -->
+      <div class="workspace-body">
+        <!-- Sidebar Controls -->
+        <aside class="sidebar-panel" id="sidebarPanel">
+          <div class="sidebar-scroll">
+            
+            <!-- SECTION 1: ROUTE & VESSEL -->
+            <section class="card-section">
+              <div class="section-header">
+                <h2>1. Vessel & Route Setup</h2>
+                <span class="pill-step">Required</span>
+              </div>
+
+              <!-- Speed and Speed Units -->
+              <div class="control-row">
+                <div class="control-group flex-2">
+                  <label for="vesselSpeed">Vessel Speed</label>
+                  <input id="vesselSpeed" type="number" min="0.1" max="100" step="0.5" value="10" />
+                </div>
+                <div class="control-group flex-2">
+                  <label for="speedUnit">Speed Unit</label>
+                  <select id="speedUnit">
+                    <option value="knots" selected>knots (kt)</option>
+                    <option value="km/h">km/h</option>
+                    <option value="m/s">m/s</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Speed unit note / converted values -->
+              <div class="speed-conversions mono" id="speedConversions">
+                = 18.5 km/h | 5.1 m/s
+              </div>
+
+              <!-- Departure Time -->
+              <div class="control-group">
+                <label for="departureTime">Departure Time (Local & UTC)</label>
+                <input id="departureTime" type="datetime-local" />
+                <div class="quick-departures">
+                  <button type="button" class="btn-micro" id="btnDepNow">Now</button>
+                  <button type="button" class="btn-micro" id="btnDepPlus6h">+6h</button>
+                  <button type="button" class="btn-micro" id="btnDepPlus12h">+12h</button>
+                  <button type="button" class="btn-micro" id="btnDepPlus24h">+24h</button>
+                </div>
+                <div class="time-readout mono" id="departureUtcReadout">
+                  UTC: --
+                </div>
+              </div>
+
+              <!-- Current Vessel Location (Dynamic Update) -->
+              <div class="control-group">
+                <label>Current Vessel Location (Dynamic)</label>
+                <div class="control-row">
+                  <div class="control-group flex-2">
+                    <label for="vesselLat">Latitude</label>
+                    <input id="vesselLat" type="number" min="-90" max="90" step="0.0001" placeholder="-41.2865" />
+                  </div>
+                  <div class="control-group flex-2">
+                    <label for="vesselLng">Longitude</label>
+                    <input id="vesselLng" type="number" min="-180" max="180" step="0.0001" placeholder="174.8860" />
+                  </div>
+                </div>
+                <div class="time-readout mono" id="vesselPositionStatus">
+                  Position: Not set
+                </div>
+                <div class="button-row tight">
+                  <button type="button" class="btn-secondary" id="btnUpdateVesselPos" title="Update vessel position and recalculate">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                    </svg>
+                    <span>Update Position & Recalculate</span>
+                  </button>
+                  <button type="button" class="btn-secondary ghost" id="btnUseMapClick" title="Click on map to set vessel position">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    <span>Click Map</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Route Drawing / Editing Tools -->
+              <div class="control-group">
+                <label>Route Tools</label>
+                <div class="button-grid-2">
+                  <button type="button" class="btn-secondary active" id="btnToggleDraw">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    <span>Click Map to Draw</span>
+                  </button>
+                  <button type="button" class="btn-secondary" id="btnClearRoute">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    <span>Clear</span>
+                  </button>
+                  <button type="button" class="btn-secondary" id="btnReverseRoute">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/>
+                    </svg>
+                    <span>Reverse</span>
+                  </button>
+                  <button type="button" class="btn-secondary" id="btnUndoPoint">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 14L4 9l5-5"/>
+                      <path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+                    </svg>
+                    <span>Undo Point</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Preloaded Sample Routes & File Import/Export -->
+              <div class="control-row">
+                <div class="control-group flex-3">
+                  <label for="sampleRoutes">Preset Route</label>
+                  <select id="sampleRoutes">
+                    <option value="">-- Choose Sample Passage --</option>
+                    <option value="cook_strait" selected>Cook Strait (Wellington → Picton, NZ)</option>
+                    <option value="hauraki_gulf">Hauraki Gulf (Auckland → Great Barrier, NZ)</option>
+                    <option value="bay_of_plenty">Bay of Plenty (Tauranga → Whakatane, NZ)</option>
+                    <option value="english_channel">English Channel (Dover → Calais)</option>
+                    <option value="sydney_jervis">Sydney → Jervis Bay (AU)</option>
+                  </select>
+                </div>
+                <div class="control-group flex-1">
+                  <label>&nbsp;</label>
+                  <button type="button" class="btn-secondary" id="btnLoadSample" title="Load chosen passage">Load</button>
+                </div>
+              </div>
+
+              <div class="route-file-actions">
+                <label class="btn-secondary btn-file-label" for="gpxFileInput">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                  </svg>
+                  <span>Import GPX/GeoJSON</span>
+                  <input type="file" id="gpxFileInput" accept=".gpx,.geojson,.json" hidden />
+                </label>
+                <button type="button" class="btn-secondary" id="btnExportRoute" title="Export Route as GeoJSON">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                  </svg>
+                  <span>Export</span>
+                </button>
+              </div>
+
+              <!-- Waypoints Collapsible Accordion -->
+              <details class="waypoints-details" id="waypointsDetails">
+                <summary>
+                  <span>Waypoints (<strong id="waypointCountBadge">0</strong>)</span>
+                  <span class="mono hint" id="waypointDistHint">0 nm</span>
+                </summary>
+                <div class="waypoints-list" id="waypointsList">
+                  <p class="empty-state">No waypoints defined yet. Click on the map or load a sample passage above.</p>
+                </div>
+              </details>
+            </section>
+
+            <!-- SECTION 2: WXTILES LAYERS & DATASETS -->
+            <section class="card-section">
+              <div class="section-header">
+                <h2>2. WxTiles Marine Data</h2>
+                <span class="status-indicator" id="apiStatusBadge">Connecting...</span>
+              </div>
+
+              <!-- Basemap Selector -->
+              <div class="control-group">
+                <label for="basemapSelect">Basemap Style</label>
+                <select id="basemapSelect">
+                  <option value="osm" selected>OpenStreetMap</option>
+                  <option value="esriWorldImagery">Esri Satellite Imagery</option>
+                  <option value="cartoDark">CartoDB Dark</option>
+                  <option value="cartoPositron">CartoDB Light</option>
+                </select>
+              </div>
+
+              <!-- Dataset Search Filter -->
+              <div class="control-group">
+                <label for="datasetFilter">Filter Available Datasets</label>
+                <input id="datasetFilter" type="text" placeholder="Filter datasets (e.g. wave, wind, gfs)..." />
+              </div>
+
+              <!-- Wave Height Layer Settings -->
+              <div class="layer-config-box">
+                <div class="layer-title">
+                  <span class="layer-dot wave-dot"></span>
+                  <strong>Wave Forecast Layer</strong>
+                </div>
+                <div class="control-group">
+                  <label for="waveDataset">Wave Dataset</label>
+                  <select id="waveDataset"></select>
+                </div>
+                <div class="control-row">
+                  <div class="control-group flex-2">
+                    <label for="waveVariable">Wave Variable</label>
+                    <select id="waveVariable"></select>
+                  </div>
+                  <div class="control-group flex-1">
+                    <label for="waveOpacity">Opacity</label>
+                    <input id="waveOpacity" type="range" min="0.1" max="1" step="0.05" value="0.85" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Wind Forecast Layer Settings -->
+              <div class="layer-config-box">
+                <div class="layer-title">
+                  <span class="layer-dot wind-dot"></span>
+                  <strong>Wind Forecast Layer</strong>
+                </div>
+                <div class="control-group">
+                  <label for="windDataset">Wind Dataset</label>
+                  <select id="windDataset"></select>
+                </div>
+                <div class="control-row">
+                  <div class="control-group flex-2">
+                    <label for="windVariable">Wind Variable</label>
+                    <select id="windVariable"></select>
+                  </div>
+                  <div class="control-group flex-1">
+                    <label for="windOpacity">Opacity</label>
+                    <input id="windOpacity" type="range" min="0.1" max="1" step="0.05" value="0.85" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Active Map Layer Overlay View -->
+              <div class="control-group">
+                <label>Active Map Overlay</label>
+                <div class="radio-pill-group">
+                  <label class="radio-pill">
+                    <input type="radio" name="activeOverlay" value="wave" checked />
+                    <span>Waves</span>
+                  </label>
+                  <label class="radio-pill">
+                    <input type="radio" name="activeOverlay" value="wind" />
+                    <span>Wind</span>
+                  </label>
+                  <label class="radio-pill">
+                    <input type="radio" name="activeOverlay" value="none" />
+                    <span>None (Route only)</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Time Step Controls -->
+              <div class="control-group">
+                <div class="flex-between">
+                  <label for="timeSelect">Forecast Timestep</label>
+                  <span class="time-label-utc mono" id="mapTimeLabel">--</span>
+                </div>
+                <select id="timeSelect"></select>
+                <div class="time-slider-row">
+                  <button type="button" class="btn-micro" id="btnPrevTime" title="Previous timestep">&larr;</button>
+                  <input type="range" id="timeSlider" min="0" max="0" value="0" />
+                  <button type="button" class="btn-micro" id="btnNextTime" title="Next timestep">&rarr;</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- SECTION 3: GENERATE FORECAST -->
+            <section class="card-section highlight-section">
+              <button type="button" class="btn-primary" id="btnRunForecast">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>Generate Route Forecast</span>
+              </button>
+              <div class="sample-options">
+                <label for="sampleResolution">Sampling Interval</label>
+                <select id="sampleResolution">
+                  <option value="auto" selected>Auto (~15-25 points)</option>
+                  <option value="2nm">Every 2 nm (~High)</option>
+                  <option value="5nm">Every 5 nm (~Medium)</option>
+                  <option value="10nm">Every 10 nm (~Coarse)</option>
+                </select>
+              </div>
+              <div class="forecast-status mono" id="forecastStatusText">Ready to compute.</div>
+              <div class="progress-bar-wrap" id="progressBarWrap" hidden>
+                <div class="progress-bar-fill" id="progressBarFill" style="width: 0%"></div>
+              </div>
+            </section>
+
+            <!-- SECTION 4: EMAIL AUTOMATION -->
+            <section class="card-section">
+              <div class="section-header">
+                <h2>4. Email Automation</h2>
+                <span class="pill-step">Optional</span>
+              </div>
+
+              <div class="control-group">
+                <label for="emailAddress">Recipient Email Address</label>
+                <input id="emailAddress" type="email" placeholder="your-email@metservice.co.nz" />
+                <div class="time-readout mono" id="emailStatusText">Not configured</div>
+              </div>
+
+              <div class="control-row">
+                <div class="control-group flex-2">
+                  <label>Email Frequency</label>
+                  <div class="radio-pill-group">
+                    <label class="radio-pill">
+                      <input type="radio" name="emailFrequency" value="2" />
+                      <span>2x Daily</span>
+                    </label>
+                    <label class="radio-pill">
+                      <input type="radio" name="emailFrequency" value="4" checked />
+                      <span>4x Daily</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="button-row tight">
+                <button type="button" class="btn-secondary" id="btnConfigureEmail" title="Open email scheduler configuration">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                  </svg>
+                  <span>Configure Scheduler</span>
+                </button>
+                <button type="button" class="btn-secondary" id="btnTestEmail" title="Send test email">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/>
+                  </svg>
+                  <span>Test Email</span>
+                </button>
+              </div>
+            </section>
+
+            <!-- SECTION 5: CONFIGURATION MANAGEMENT -->
+            <section class="card-section">
+              <div class="section-header">
+                <h2>5. Save & Load Configuration</h2>
+                <span class="pill-step">Optional</span>
+              </div>
+
+              <div class="control-group">
+                <label for="configName">Configuration Name</label>
+                <input id="configName" type="text" placeholder="e.g., Cook Strait Route - October 2024" />
+              </div>
+
+              <div class="button-row">
+                <button type="button" class="btn-secondary" id="btnSaveConfig" title="Save current route, vessel settings, and email config">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                  <span>Save</span>
+                </button>
+                <button type="button" class="btn-secondary" id="btnLoadConfig" title="Load a saved configuration">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                  </svg>
+                  <span>Load</span>
+                </button>
+                <button type="button" class="btn-secondary" id="btnExportConfig" title="Export configuration as JSON">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                  </svg>
+                  <span>Export</span>
+                </button>
+              </div>
+
+              <!-- Saved Configurations List -->
+              <details class="config-details" id="configDetails" open>
+                <summary>
+                  <span>Saved Configurations (<strong id="configCountBadge">0</strong>)</span>
+                </summary>
+                <div class="config-list" id="configList">
+                  <p class="empty-state">No saved configurations. Create one using the buttons above.</p>
+                </div>
+              </details>
+            </section>
+
+          </div>
+        </aside>
+
+        <!-- Right Map Display -->
+        <main class="map-container-wrap">
+          <div id="map" class="route-map"></div>
+
+          <!-- Floating Map Legend -->
+          <div class="floating-legend" id="mapLegend">
+            <div class="legend-header">
+              <span id="legendTitle">Wave Height (Hs)</span>
+              <span class="legend-unit mono" id="legendUnit">m</span>
+            </div>
+            <canvas id="legendCanvas" width="220" height="14"></canvas>
+            <div class="legend-ticks mono" id="legendTicks">
+              <span>0m</span>
+              <span>2m</span>
+              <span>4m</span>
+              <span>6m+</span>
+            </div>
+          </div>
+
+          <!-- Live Coordinate & Value HUD -->
+          <div class="map-hud">
+            <span class="hud-item mono" id="hudCoords">lnglat=(--, --)</span>
+            <span class="hud-item mono" id="hudValues">waves=-- wind=--</span>
+          </div>
+
+          <!-- Bottom Drawer / Tabs: Along-Route Profile & Forecast Table -->
+          <div class="bottom-drawer" id="bottomDrawer">
+            <div class="drawer-header">
+              <div class="drawer-tabs">
+                <button type="button" class="tab-btn active" data-tab="chartTab">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                  </svg>
+                  <span>Along-Route Profile Chart</span>
+                </button>
+                <button type="button" class="tab-btn" data-tab="tableTab">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                  </svg>
+                  <span>Detailed Route Table</span>
+                </button>
+              </div>
+
+              <div class="drawer-actions">
+                <button type="button" class="btn-micro ghost" id="btnExportCsv" title="Export Route Forecast to CSV">
+                  <span>Export CSV</span>
+                </button>
+                <button type="button" class="btn-micro ghost" id="btnExportPdf" title="Export Route Forecast to PDF">
+                  <span>Export PDF</span>
+                </button>
+                <button type="button" class="btn-micro ghost" id="btnToggleDrawer" title="Collapse/Expand Drawer">
+                  <span id="drawerToggleText">Minimize</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="drawer-content">
+              <!-- Tab 1: Profile Chart -->
+              <div class="tab-pane active" id="chartTab">
+                <div class="chart-wrapper">
+                  <div class="chart-legend-row">
+                    <span class="chart-legend-item wave-color">
+                      <span class="swatch"></span> Wave Height (<span id="chartWaveUnit">m</span>)
+                    </span>
+                    <span class="chart-legend-item wind-color">
+                      <span class="swatch"></span> Wind Speed (<span id="chartWindUnit">knots</span>)
+                    </span>
+                    <span class="chart-legend-item wind-dir-color">
+                      <span class="arrow-sample">&uarr;</span> Wind Direction (Relative to Heading)
+                    </span>
+                    <span class="chart-hint">Hover over chart to scrub position on route</span>
+                  </div>
+                  <div class="canvas-container" id="canvasContainer">
+                    <canvas id="profileCanvas"></canvas>
+                    <div class="chart-tooltip" id="chartTooltip" hidden></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tab 2: Forecast Table -->
+              <div class="tab-pane" id="tableTab">
+                <div class="table-responsive">
+                  <table class="forecast-table" id="forecastTable">
+                    <thead>
+                      <tr>
+                        <th>Point</th>
+                        <th>Distance</th>
+                        <th>ETA (UTC)</th>
+                        <th>ETA (Local)</th>
+                        <th>Matched Timestep</th>
+                        <th>Wave Height</th>
+                        <th>Wind Speed</th>
+                        <th>Wind Dir</th>
+                        <th>Relative Wind</th>
+                      </tr>
+                    </thead>
+                    <tbody id="forecastTableBody">
+                      <tr>
+                        <td colspan="9" class="text-center empty-cell">
+                          No forecast generated yet. Configure your route and click <strong>Generate Route Forecast</strong>.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- Scripts -->
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script type="module" src="./route.js"></script>
+  </body>
+</html>
