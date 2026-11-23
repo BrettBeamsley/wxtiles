@@ -1559,9 +1559,9 @@ async function exportPdf() {
   // Calculate content and box dimensions
   const hasSimulated = state.checkpoints.some(c=>c.isSimulated);
   const noteWidth = contentW - 8;  // Available width for text
-  const lineHeight = 2.8;  // Reduced from 3.0 to fit better
+  const lineHeight = 2.6;  // Further reduced to fit better
   const topPadding = 7;    // Space for title
-  const bottomPadding = 3; // Space at bottom
+  const bottomPadding = 4; // Increased space at bottom to prevent overflow
   
   // Wrap main note text
   const mainNoteText = "Wave and wind data sourced from MetOcean WxTiles API. Forecasts are model-derived estimates and should not be used as the sole navigational authority. Always cross-reference with official maritime forecasts and warnings from MetService New Zealand.";

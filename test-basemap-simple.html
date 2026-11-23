@@ -1,0 +1,66 @@
+﻿<html>
+<head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<button onclick="createTestPDF()">Create Test PDF with Basemap</button>
+<div id="result"></div>
+
+<script>
+function createTestPDF() {
+  // Simulate the basemap drawing code exactly as it appears in route.js
+  const mapCanvas = document.createElement('canvas');
+  mapCanvas.width = 800;
+  mapCanvas.height = 400;
+  const ctx = mapCanvas.getContext('2d');
+  
+  console.log('[TEST] Canvas created: ' + mapCanvas.width + 'x' + mapCanvas.height);
+  
+  // Draw basemap EXACTLY as in route.js
+  ctx.fillStyle = '#e8f1f8';
+  ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+  console.log('[TEST] Drew light blue background');
+  
+  ctx.fillStyle = '#f0ede0';
+  ctx.fillRect(0, mapCanvas.height * 0.6, mapCanvas.width * 0.3, mapCanvas.height * 0.4);
+  console.log('[TEST] Drew tan land rectangle');
+  
+  // Draw some route lines
+  ctx.strokeStyle = '#22c55e';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(100, 100);
+  ctx.lineTo(400, 200);
+  ctx.lineTo(700, 150);
+  ctx.stroke();
+  console.log('[TEST] Drew green route line');
+  
+  // Get the data URL
+  const dataUrl = mapCanvas.toDataURL('image/png');
+  console.log('[TEST] Data URL length: ' + dataUrl.length);
+  
+  // Create PDF
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  
+  // Add title
+  doc.setFontSize(16);
+  doc.text('Test: Basemap in PDF', 10, 10);
+  
+  // Add the map image
+  doc.addImage(dataUrl, 'PNG', 10, 20, 190, 100);
+  console.log('[TEST] Added image to PDF');
+  
+  // Add footer
+  doc.setFontSize(10);
+  doc.text('If you see colors below, basemap rendering works!', 10, 130);
+  
+  // Save
+  doc.save('test-basemap-output.pdf');
+  console.log('[TEST] PDF saved!');
+  
+  document.getElementById('result').innerHTML = '<p style="color:green;">✓ PDF created and saved to downloads!</p><p>Check the console (F12) for detailed logs.</p>';
+}
+</script>
+</body>
+</html>
