@@ -1104,17 +1104,17 @@ async function captureMapImage() {
     console.log('[MapCapture] Starting basemap drawing to 800x400 canvas');
     
     // IMPORTANT: Draw basemap FIRST before anything else
-    // Draw background (ocean/land colors) - USING BRIGHT COLORS FOR VISIBILITY TEST
-    ctx.fillStyle = '#0000FF'; // BRIGHT BLUE water (testing if colors appear at all)
-    console.log('[MapCapture] fillStyle set to #0000FF (BRIGHT BLUE)');
+    // Draw background (ocean/land colors)
+    ctx.fillStyle = '#e8f1f8'; // Light blue water
+    console.log('[MapCapture] fillStyle set to #e8f1f8 (light blue)');
     ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
-    console.log('[MapCapture] Drew BRIGHT BLUE background (0,0,800,400)');
+    console.log('[MapCapture] Drew light blue background (0,0,800,400)');
     
     // Add subtle land masses 
-    ctx.fillStyle = '#FF0000'; // BRIGHT RED land (testing if colors appear at all)
-    console.log('[MapCapture] fillStyle set to #FF0000 (BRIGHT RED)');
+    ctx.fillStyle = '#f0ede0'; // Tan land
+    console.log('[MapCapture] fillStyle set to #f0ede0 (tan land)');
     ctx.fillRect(0, mapCanvas.height * 0.6, mapCanvas.width * 0.3, mapCanvas.height * 0.4);
-    console.log('[MapCapture] Drew BRIGHT RED rectangle (0,240,240,160)');
+    console.log('[MapCapture] Drew tan land rectangle (0,240,240,160)');
     
     // Draw subtle grid/graticule
     ctx.strokeStyle = 'rgba(150, 170, 200, 0.2)';
@@ -1559,9 +1559,9 @@ async function exportPdf() {
   // Calculate content and box dimensions
   const hasSimulated = state.checkpoints.some(c=>c.isSimulated);
   const noteWidth = contentW - 8;  // Available width for text
-  const lineHeight = 2.6;  // Further reduced to fit better
-  const topPadding = 7;    // Space for title
-  const bottomPadding = 4; // Increased space at bottom to prevent overflow
+  const lineHeight = 2.3;  // Reduced to allow more wrapped lines to fit
+  const topPadding = 8;    // Space for title
+  const bottomPadding = 5; // Extra space at bottom
   
   // Wrap main note text
   const mainNoteText = "Wave and wind data sourced from MetOcean WxTiles API. Forecasts are model-derived estimates and should not be used as the sole navigational authority. Always cross-reference with official maritime forecasts and warnings from MetService New Zealand.";
@@ -1575,10 +1575,15 @@ async function exportPdf() {
   }
   
   // Calculate total box height needed with safety margin
-  const mainNoteHeight = mainNoteLines.length * lineHeight;
-  const spaceBetween = hasSimulated ? 1.5 : 0;
-  const simNoteHeight = simNoteLines.length * lineHeight;
+  // Add extra line height to account for jsPDF text rendering
+  const mainNoteHeight = mainNoteLines.length * lineHeight + 1;
+  const spaceBetween = hasSimulated ? 2 : 0;
+  const simNoteHeight = simNoteLines.length * lineHeight + 1;
   const totalBoxHeight = topPadding + mainNoteHeight + spaceBetween + simNoteHeight + bottomPadding;
+  
+  console.log('[DataNotes] mainNoteLines:', mainNoteLines.length, 'simNoteLines:', simNoteLines.length);
+  console.log('[DataNotes] Box height:', totalBoxHeight, '(top:', topPadding, '+ main:', mainNoteHeight, '+ space:', spaceBetween, '+ sim:', simNoteHeight, '+ bottom:', bottomPadding, ')');
+
   
   // Ensure there's enough space, otherwise add new page
   if (y + totalBoxHeight > H - 15) {
@@ -1601,7 +1606,7 @@ async function exportPdf() {
   
   // Draw main note text - all wrapped lines
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
+  doc.setFontSize(6.5);  // Reduced from 7 to fit better
   doc.setTextColor(80, 55, 0);
   let noteY = y + topPadding + 1;
   mainNoteLines.forEach((line, idx) => {
