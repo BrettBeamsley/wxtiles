@@ -1124,74 +1124,125 @@ async function captureMapImage() {
     minLng -= lngPadding;
     maxLng += lngPadding;
     
-    // Draw navigation chart style basemap
-    console.log('[MapCapture] Drawing navigation chart style basemap');
+    // Calculate appropriate zoom level based on bounds
+    const latDiff = maxLat - minLat;
+    const lngDiff = maxLng - minLng;
+    const maxDiff = Math.max(latDiff, lngDiff);
     
-    // Ocean background (deep blue like navigation charts)
-    ctx.fillStyle = '#1a3a52'; // Deep ocean blue
-    ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+    // Determine zoom level for decent detail
+    let zoom = 8;
+    if (maxDiff < 0.1) zoom = 10;
+    if (maxDiff < 0.05) zoom = 11;
+    if (maxDiff < 0.02) zoom = 12;
     
-    // Draw simple landmass areas (simulating major coastal features)
-    // These are approximate positions for general nautical chart look
-    ctx.fillStyle = '#8B7355'; // Brown/tan for land
+    console.log('[MapCapture] Route bounds: lat', minLat.toFixed(2), '-', maxLat.toFixed(2), 'lng', minLng.toFixed(2), '-', maxLng.toFixed(2), 'zoom:', zoom);
     
-    // Add some coastal features (simplified)
-    ctx.beginPath();
-    ctx.arc(mapCanvas.width * 0.1, mapCanvas.height * 0.3, mapCanvas.width * 0.08, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.fillRect(0, mapCanvas.height * 0.65, mapCanvas.width * 0.25, mapCanvas.height * 0.35);
-    
-    // Add a subtle graticule grid for navigation reference
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 0.5;
-    for (let i = 1; i < 10; i++) {
-      const x = (i / 10) * mapCanvas.width;
-      const y = (i / 10) * mapCanvas.height;
+    // Fetch and render OSM tiles
+    const fetchAndDrawTiles = async () => {
+      // Convert degrees to tile coordinates
+      const latlngToTile = (lat, lng, z) => {
+        const n = Math.pow(2, z);
+        const x = Math.floor((lng + 180) / 360 * n);
+        const y = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+        return { x, y, z };
+      };
       
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, mapCanvas.height);
-      ctx.stroke();
+      const tileTopLeft = latlngToTile(maxLat, minLng, zoom);
+      const tileBotRight = latlngToTile(minLat, maxLng, zoom);
       
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(mapCanvas.width, y);
-      ctx.stroke();
+      console.log('[MapCapture] Tiles needed: x', tileTopLeft.x, '-', tileBotRight.x, 'y', tileTopLeft.y, '-', tileBotRight.y);
+      
+      const tileSize = 256;
+      const tilesWide = tileBotRight.x - tileTopLeft.x + 1;
+      const tilesHigh = tileBotRight.y - tileTopLeft.y + 1;
+      
+      // Create temporary canvas for all tiles
+      const tileCanvas = document.createElement('canvas');
+      tileCanvas.width = tilesWide * tileSize;
+      tileCanvas.height = tilesHigh * tileSize;
+      const tileCtx = tileCanvas.getContext('2d');
+      
+      // Fill with ocean color as fallback
+      tileCtx.fillStyle = '#a4c8e1';
+      tileCtx.fillRect(0, 0, tileCanvas.width, tileCanvas.height);
+      
+      // Fetch each tile
+      const tilePromises = [];
+      for (let tx = tileTopLeft.x; tx <= tileBotRight.x; tx++) {
+        for (let ty = tileTopLeft.y; ty <= tileBotRight.y; ty++) {
+          const tileUrl = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`;
+          const drawX = (tx - tileTopLeft.x) * tileSize;
+          const drawY = (ty - tileTopLeft.y) * tileSize;
+          
+          const p = new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              tileCtx.drawImage(img, drawX, drawY);
+              resolve();
+            };
+            img.onerror = () => {
+              // On error, fill with tan color (land) instead of leaving blank
+              tileCtx.fillStyle = '#d0ccc4';
+              tileCtx.fillRect(drawX, drawY, tileSize, tileSize);
+              resolve();
+            };
+            img.src = tileUrl;
+          });
+          
+          tilePromises.push(p);
+        }
+      }
+      
+      // Wait for all tiles to load
+      await Promise.all(tilePromises);
+      
+      // Now scale and draw the tile canvas onto the map canvas
+      ctx.fillStyle = '#a4c8e1';
+      ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+      
+      // Calculate scaling to fit all tiles into map canvas
+      const scale = Math.min(mapCanvas.width / tileCanvas.width, mapCanvas.height / tileCanvas.height);
+      
+      // Center the tiles on the map canvas
+      const scaledWidth = tileCanvas.width * scale;
+      const scaledHeight = tileCanvas.height * scale;
+      const offsetX = (mapCanvas.width - scaledWidth) / 2;
+      const offsetY = (mapCanvas.height - scaledHeight) / 2;
+      
+      ctx.drawImage(tileCanvas, offsetX, offsetY, scaledWidth, scaledHeight);
+      
+      console.log('[MapCapture] Tiles rendered successfully');
+    };
+    
+    // Execute tile fetching
+    try {
+      await fetchAndDrawTiles();
+    } catch (e) {
+      console.warn('[MapCapture] Tile fetching error, using fallback colors:', e);
+      // Fallback: use ocean color
+      ctx.fillStyle = '#a4c8e1';
+      ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
     }
     
-    // Add coordinate labels around the border (navigation chart style)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Draw latitude labels
-    for (let i = 0; i <= 5; i++) {
-      const lat = maxLat - (i * (maxLat - minLat) / 5);
-      const y = (i / 5) * mapCanvas.height;
-      ctx.fillText(`${lat.toFixed(2)}°`, 8, y);
-    }
-    
-    // Draw longitude labels  
-    for (let i = 0; i <= 5; i++) {
-      const lng = minLng + (i * (maxLng - minLng) / 5);
-      const x = (i / 5) * mapCanvas.width;
-      ctx.textAlign = 'center';
-      ctx.fillText(`${lng.toFixed(2)}°`, x, mapCanvas.height - 8);
-    }
-    
+    // Calculate canvas coordinates
     const toCanvasCoord = (lat, lng) => {
+      // Need to map from lat/lng bounds to the actual canvas after tile scaling
       const x = ((lng - minLng) / (maxLng - minLng)) * mapCanvas.width;
       const y = mapCanvas.height - ((lat - minLat) / (maxLat - minLat)) * mapCanvas.height;
       return [x, y];
     };
     
-    // Draw route line
-    ctx.strokeStyle = '#00FF00'; // Bright green for visibility on chart
+    // Draw route line on top of map
+    ctx.strokeStyle = '#00FF00'; // Bright green for visibility
     ctx.lineWidth = 4;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    
     ctx.beginPath();
     state.waypoints.forEach((wp, i) => {
       const [x, y] = toCanvasCoord(wp.lat, wp.lng);
@@ -1199,6 +1250,10 @@ async function captureMapImage() {
       else ctx.lineTo(x, y);
     });
     ctx.stroke();
+    
+    // Clear shadow effects
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
     
     // Draw waypoint markers
     state.waypoints.forEach((wp, i) => {
