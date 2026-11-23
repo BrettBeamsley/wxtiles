@@ -1104,17 +1104,17 @@ async function captureMapImage() {
     console.log('[MapCapture] Starting basemap drawing to 800x400 canvas');
     
     // IMPORTANT: Draw basemap FIRST before anything else
-    // Draw background (ocean/land colors)
-    ctx.fillStyle = '#e8f1f8'; // Light blue water
-    console.log('[MapCapture] fillStyle set to #e8f1f8');
+    // Draw background (ocean/land colors) - USING BRIGHT COLORS FOR VISIBILITY TEST
+    ctx.fillStyle = '#0000FF'; // BRIGHT BLUE water (testing if colors appear at all)
+    console.log('[MapCapture] fillStyle set to #0000FF (BRIGHT BLUE)');
     ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
-    console.log('[MapCapture] Drew light blue background (0,0,800,400)');
+    console.log('[MapCapture] Drew BRIGHT BLUE background (0,0,800,400)');
     
     // Add subtle land masses 
-    ctx.fillStyle = '#f0ede0'; // Tan land
-    console.log('[MapCapture] fillStyle set to #f0ede0');
+    ctx.fillStyle = '#FF0000'; // BRIGHT RED land (testing if colors appear at all)
+    console.log('[MapCapture] fillStyle set to #FF0000 (BRIGHT RED)');
     ctx.fillRect(0, mapCanvas.height * 0.6, mapCanvas.width * 0.3, mapCanvas.height * 0.4);
-    console.log('[MapCapture] Drew tan land rectangle (0,240,240,160)');
+    console.log('[MapCapture] Drew BRIGHT RED rectangle (0,240,240,160)');
     
     // Draw subtle grid/graticule
     ctx.strokeStyle = 'rgba(150, 170, 200, 0.2)';
