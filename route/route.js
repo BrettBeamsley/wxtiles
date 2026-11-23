@@ -1586,6 +1586,37 @@ async function exportPdf() {
     return yy+10;
   };
 
+  // ── DATA SOURCES SECTION ───────────────────────────────────────────────────
+  if (y > H-50) { doc.addPage(); y=margin; }
+  y = sectionHeader("DATA SOURCES", y);
+
+  // Get current dataset selections
+  const waveDatasetName = els.waveDataset?.value || "Unknown";
+  const windDatasetName = els.windDataset?.value || "Unknown";
+
+  doc.setFillColor(240, 245, 250);
+  doc.roundedRect(margin, y, contentW, 20, 1, 1, "F");
+  
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(14, 24, 48);
+  
+  const datasetLabels = [
+    { label: "Wave Dataset:", value: waveDatasetName },
+    { label: "Wind Dataset:", value: windDatasetName }
+  ];
+  
+  datasetLabels.forEach((item, idx) => {
+    doc.setFont("helvetica", "bold");
+    doc.text(item.label, margin + 4, y + 4 + idx * 8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(50, 70, 100);
+    doc.text(item.value, margin + 40, y + 4 + idx * 8);
+    doc.setTextColor(14, 24, 48);
+  });
+
+  y += 24;
+
   // ── ROUTE MAP SECTION ──────────────────────────────────────────────────────
   if (y > H-100) { doc.addPage(); y=margin; }
   y = sectionHeader("ROUTE MAP", y+4);
