@@ -189,8 +189,9 @@ const els = {
   // Configuration management elements
   configName:         document.getElementById("configName"),
   btnSaveConfig:      document.getElementById("btnSaveConfig"),
-  btnLoadConfig:      document.getElementById("btnLoadConfig"),
   btnExportConfig:    document.getElementById("btnExportConfig"),
+  btnImportConfig:    document.getElementById("btnImportConfig"),
+  configFileInput:    document.getElementById("configFileInput"),
   configDetails:      document.getElementById("configDetails"),
   configList:         document.getElementById("configList"),
   configCountBadge:   document.getElementById("configCountBadge"),
@@ -253,7 +254,9 @@ function initMap() {
     color: "#38bdf8", weight: 4, opacity: 0.9, lineJoin: "round",
   }).addTo(state.map);
 
-  state.map.on("click", (e) => { if (state.drawingEnabled) addWaypoint(e.latlng.lat, e.latlng.lng); });
+  state.map.on("click", (e) => { 
+    if (state.drawingEnabled && !mapClickMode) addWaypoint(e.latlng.lat, e.latlng.lng); 
+  });
   state.map.on("mousemove", (e) => {
     const w = e.latlng.wrap();
     els.hudCoords.textContent = `lnglat=(${w.lng.toFixed(3)}, ${w.lat.toFixed(3)})`;
@@ -479,9 +482,9 @@ function updateVesselPosition() {
   
   setVesselPosition(lat, lng);
   
-  // If route exists, recalculate forecast from new position
+  // Recalculate route from vessel position
   if (state.waypoints.length >= 2) {
-    runRouteForecast();
+    recalculateRouteFromVesselPosition();
   }
 }
 
@@ -492,6 +495,83 @@ function updateVesselPositionStatus() {
     if (els.vesselPositionStatus) {
       els.vesselPositionStatus.textContent = `Position: ${state.vesselLat.toFixed(4)}, ${state.vesselLng.toFixed(4)}`;
     }
+  }
+}
+
+function recalculateRouteFromVesselPosition() {
+  if (!state.vesselLat || !state.vesselLng) {
+    alert("Vessel position not set. Please set it first.");
+    return;
+  }
+  
+  if (state.waypoints.length < 2) {
+    alert("Route must have at least 2 waypoints.");
+    return;
+  }
+  
+  const vesselLat = state.vesselLat;
+  const vesselLng = state.vesselLng;
+  
+  // Calculate distance from vessel to each waypoint
+  const waypointDistances = state.waypoints.map((wp, i) => ({
+    index: i,
+    waypoint: wp,
+    distNm: haversineM(vesselLat, vesselLng, wp.lat, wp.lng) / M_PER_NM
+  }));
+  
+  // Find closest waypoint
+  let closestIndex = 0;
+  let closestDist = waypointDistances[0].distNm;
+  for (let i = 1; i < waypointDistances.length; i++) {
+    if (waypointDistances[i].distNm < closestDist) {
+      closestDist = waypointDistances[i].distNm;
+      closestIndex = i;
+    }
+  }
+  
+  // Check if vessel is at start (within 1 nm of first waypoint)
+  const AT_START_THRESHOLD = 1.0;
+  const isAtStart = waypointDistances[0].distNm <= AT_START_THRESHOLD;
+  
+  // Determine next waypoint: use the waypoint after closest
+  let nextWaypointIndex = closestIndex + 1;
+  
+  // If closest is the last waypoint, we can't proceed
+  if (nextWaypointIndex >= state.waypoints.length) {
+    alert("Vessel position is too close to or past the final waypoint. Cannot recalculate route.");
+    return;
+  }
+  
+  // Build new route: Vessel position (WP1) + remaining waypoints
+  const newWaypoints = [
+    { name: "Current Position (WP 1)", lat: vesselLat, lng: vesselLng }
+  ];
+  
+  // Add remaining waypoints starting from nextWaypointIndex
+  for (let i = nextWaypointIndex; i < state.waypoints.length; i++) {
+    newWaypoints.push(state.waypoints[i]);
+  }
+  
+  // Clear and rebuild route
+  clearRoute();
+  newWaypoints.forEach((wp, idx) => {
+    // Keep original waypoint names for remaining waypoints
+    addWaypoint(wp.lat, wp.lng, wp.name);
+  });
+  
+  // Handle departure time
+  if (isAtStart) {
+    // At start - let user decide (keep current time)
+    els.forecastStatusText.textContent = "Route updated from vessel position (at start). Set departure time and click 'Generate Route Forecast' to recalculate.";
+  } else {
+    // Further along - set to NOW
+    const now = new Date();
+    state.departureDate = now;
+    const pad = (n) => String(n).padStart(2, "0");
+    els.departureTime.value = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    updateDepartureUtcDisplay();
+    
+    els.forecastStatusText.textContent = "Route updated from vessel position. Departure time set to NOW. Click 'Generate Route Forecast' to recalculate.";
   }
 }
 
@@ -1537,6 +1617,10 @@ async function exportPdf() {
     y += 10;
   }
 
+  // ── PAGE BREAK AFTER MAP ───────────────────────────────────────────────────
+  doc.addPage();
+  y = margin;
+
   // ── WAYPOINTS SECTION ─────────────────────────────────────────────────────
   y = sectionHeader("ROUTE WAYPOINTS", y+4);
   doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(10,25,55);
@@ -1561,50 +1645,72 @@ async function exportPdf() {
   y+=6;
 
   // ── PROFILE CHART SNAPSHOT ────────────────────────────────────────────────
-  if (y > H-80) { doc.addPage(); y=margin; }
+  if (y > H-100) { doc.addPage(); y=margin; }
   y = sectionHeader("ALONG-ROUTE FORECAST PROFILE", y);
 
-  // Render chart to a fresh canvas for capture
+  // Render chart to a fresh canvas for capture with larger height for visibility
   const tmpCanvas=document.createElement("canvas");
-  tmpCanvas.width=800; tmpCanvas.height=200;
+  tmpCanvas.width=800; tmpCanvas.height=300;  // Increased to 300 to accommodate date and time labels
   const tmpCtx=tmpCanvas.getContext("2d");
-  tmpCtx.fillStyle="#f8fafc"; tmpCtx.fillRect(0,0,800,200);
+  tmpCtx.fillStyle="#f8fafc"; tmpCtx.fillRect(0,0,800,300);
 
   // Simple chart render into temp canvas
-  renderChartToCanvas(tmpCtx, 800, 200);
+  renderChartToCanvas(tmpCtx, 800, 300);
 
   try {
     const imgData=tmpCanvas.toDataURL("image/png");
-    const imgH=52;
+    const imgH=85;  // Increased to 85 to show date and time labels
     doc.addImage(imgData,"PNG",margin,y,contentW,imgH);
     y+=imgH+6;
 
-    // Chart legend
+    // Chart legend - properly formatted to fit on page
     doc.setFillColor(240,246,255); doc.roundedRect(margin,y,contentW,8,1,1,"F");
-    [[5,"#3b82f6","Wave Height (Hs, m)"],[65,"#f59e0b",`Wind Speed (${speedUnit})`],[130,"#38bdf8","↑ Wind Direction relative to heading"]].forEach(([lx,c,label])=>{
-      const [r,g,b]=[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];
-      doc.setFillColor(r,g,b); doc.roundedRect(margin+lx,y+2.5,10,3,0.5,0.5,"F");
+    const legendItems = [
+      {x:5, color:"#3b82f6", label:"Wave Height (Hs, m)"},
+      {x:65, color:"#f59e0b", label:`Wind Speed (${speedUnit})`},
+      {x:135, color:"#38bdf8", label:"Wind Dir"}
+    ];
+    
+    legendItems.forEach(({x, color, label})=>{
+      if (x + 50 > contentW) return;  // Skip if would overflow
+      const [r,g,b]=[parseInt(color.slice(1,3),16),parseInt(color.slice(3,5),16),parseInt(color.slice(5,7),16)];
+      doc.setFillColor(r,g,b); doc.roundedRect(margin+x,y+2.5,10,3,0.5,0.5,"F");
       doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(50,70,100);
-      doc.text(label, margin+lx+12, y+5.5);
+      doc.text(label, margin+x+12, y+5.5);
     });
     y+=14;
   } catch(e) { console.warn("Chart image capture failed", e); y+=6; }
 
+  // ── PAGE BREAK AFTER PROFILE CHART ────────────────────────────────────────
+  doc.addPage();
+  y = margin;
+
   // ── DETAILED FORECAST TABLE ────────────────────────────────────────────────
-  if (y > H-50) { doc.addPage(); y=margin; }
+  // Check if we need a page break BEFORE drawing table
+  // Calculate actual number of rows that will be shown
+  const filteredRows = state.checkpoints.filter((cp,i)=> cp.isWaypoint || i%(Math.max(1,Math.floor(state.checkpoints.length/40)))===0 || i===state.checkpoints.length-1);
+  const actualTableRows = filteredRows.length;
+  const sectionHeaderHeight = 10;
+  const estimatedTableHeight = sectionHeaderHeight + 6 + (actualTableRows * 5) + 10; // section header + table header + all visible rows + padding
+  
+  if (y + estimatedTableHeight > H - 20) { 
+    doc.addPage(); 
+    y = margin; 
+  }
+  
   y = sectionHeader("DETAILED CHECKPOINT FORECAST", y);
 
   const su=speedUnit;
   const cols=[
-    {h:"Point",          w:28},
-    {h:"Dist (nm)",      w:18},
-    {h:"ETA UTC",        w:28},
-    {h:"Local",          w:16},
-    {h:`Wave Hs (m)`,   w:20},
-    {h:`Wind (${su})`,  w:18},
-    {h:"Dir",            w:14},
-    {h:"Sea State",      w:22},
-    {h:"Rel. Wind",      w:contentW-28-18-28-16-20-18-14-22},
+    {h:"Point",          w:24},
+    {h:"Dist (nm)",      w:16},
+    {h:"ETA UTC",        w:24},
+    {h:"Local",          w:14},
+    {h:`Wave Hs (m)`,   w:18},
+    {h:`Wind (${su})`,  w:16},
+    {h:"Dir",            w:12},
+    {h:"Sea State",      w:20},
+    {h:"Rel. Wind",      w:contentW-24-16-24-14-18-16-12-20},
   ];
 
   // Header row
@@ -1621,7 +1727,9 @@ async function exportPdf() {
   };
 
   state.checkpoints.filter((cp,i)=> cp.isWaypoint || i%(Math.max(1,Math.floor(state.checkpoints.length/40)))===0 || i===state.checkpoints.length-1).forEach((cp,ri)=>{
-    if (y > H-18) { doc.addPage(); y=margin;
+    if (y > H-18) { 
+      doc.addPage(); 
+      y=margin;
       // Re-draw header
       doc.setFillColor(10,25,55); doc.rect(margin,y,contentW,6,"F");
       doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(200,220,255);
@@ -1636,15 +1744,15 @@ async function exportPdf() {
 
     const ss=cp.waveHeight>4?"Very Rough":cp.waveHeight>2.5?"Rough":cp.waveHeight>1.25?"Moderate":cp.waveHeight>0.5?"Slight":"Calm";
     const vals=[
-      cp.name.length>16?cp.name.slice(0,14)+"..":cp.name,
+      cp.name.length>14?cp.name.slice(0,12)+"..":cp.name,
       cp.distNm.toFixed(1),
-      formatUtcTimeShort(cp.eta).length>10?formatUtcTimeShort(cp.eta).slice(0,10):formatUtcTimeShort(cp.eta),
-      formatLocalTimeShort(cp.eta).length>8?formatLocalTimeShort(cp.eta).slice(0,8):formatLocalTimeShort(cp.eta),
+      formatUtcTimeShort(cp.eta).length>10?formatUtcTimeShort(cp.eta).slice(0,9):formatUtcTimeShort(cp.eta),
+      formatLocalTimeShort(cp.eta).length>8?formatLocalTimeShort(cp.eta).slice(0,7):formatLocalTimeShort(cp.eta),
       cp.waveHeight.toFixed(2),
       cp.windSpeed.toFixed(1),
       `${cp.windDir}°${compassSector(cp.windDir)}`,
-      ss.length>10?ss.slice(0,9):ss,
-      cp.relWindLabel.length>12?cp.relWindLabel.slice(0,11):cp.relWindLabel,
+      ss.length>9?ss.slice(0,8):ss,
+      cp.relWindLabel.length>14?cp.relWindLabel.slice(0,13):cp.relWindLabel,
     ];
 
     cx=margin;
@@ -1681,7 +1789,7 @@ async function exportPdf() {
 // Render profile chart to an arbitrary canvas context (for PDF capture)
 function renderChartToCanvas(ctx, W, H) {
   if (!state.checkpoints.length) return;
-  const pL=48,pR=52,pT=28,pB=24, pW=W-pL-pR, pH=H-pT-pB;
+  const pL=48,pR=52,pT=28,pB=70, pW=W-pL-pR, pH=H-pT-pB;
   const totalDist=state.checkpoints[state.checkpoints.length-1].distNm;
   const maxWave=Math.max(3,...state.checkpoints.map(c=>c.waveHeight*1.25));
   const maxWind=Math.max(20,...state.checkpoints.map(c=>c.windSpeed*1.25));
@@ -1713,10 +1821,43 @@ function renderChartToCanvas(ctx, W, H) {
   state.checkpoints.forEach((cp,i)=>{const x=getX(cp.distNm),y=getVY(cp.windSpeed);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
   ctx.strokeStyle="#f59e0b"; ctx.lineWidth=2; ctx.stroke();
 
+  // Draw wind direction arrows (every Nth point for clarity)
+  // Wind direction is relative to TRUE NORTH (0°=N, 90°=E, 180°=S, 270°=W)
+  const arrowStep=Math.max(1,Math.floor(state.checkpoints.length/15));
+  state.checkpoints.forEach((cp,i)=>{
+    if(i%arrowStep!==0) return;
+    const x=getX(cp.distNm), y=getVY(cp.windSpeed);
+    // Convert compass bearing to canvas coordinates: sin(θ) for x-offset, -cos(θ) for y-offset
+    const angleRad=cp.windDir*Math.PI/180;
+    const len=12;
+    const dx=len*Math.sin(angleRad), dy=-len*Math.cos(angleRad);
+    ctx.strokeStyle="#38bdf8"; ctx.fillStyle="#38bdf8"; ctx.lineWidth=1.5;
+    // Draw arrow line
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+dx,y+dy); ctx.stroke();
+    // Draw arrowhead
+    const headLen=4;
+    const angle1=angleRad+Math.PI*0.75, angle2=angleRad-Math.PI*0.75;
+    ctx.beginPath();
+    ctx.moveTo(x+dx,y+dy);
+    ctx.lineTo(x+dx+headLen*Math.sin(angle1),y+dy-headLen*Math.cos(angle1));
+    ctx.lineTo(x+dx+headLen*Math.sin(angle2),y+dy-headLen*Math.cos(angle2));
+    ctx.closePath();
+    ctx.fill();
+  });
+
   ctx.fillStyle="#222"; ctx.font="11px monospace"; ctx.textAlign="center";
   for (let i=0;i<=5;i++){
     const dv=(i/5)*totalDist;
-    ctx.fillText(`${dv.toFixed(0)} nm`,getX(dv),pT+pH+16);
+    const cp=state.checkpoints.find(c=>Math.abs(c.distNm-dv)<0.5) || state.checkpoints[Math.floor(i/5*state.checkpoints.length)];
+    if(cp){
+      const eta=new Date(cp.eta);
+      const dateStr=eta.toLocaleDateString('en-NZ',{month:'short',day:'2-digit'});
+      const timeStr=eta.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit',hour12:false});
+      ctx.fillText(`${dv.toFixed(0)} nm`,getX(dv),pT+pH+16);
+      ctx.font="9px monospace"; ctx.fillStyle="rgba(100,100,100,0.7)";
+      ctx.fillText(dateStr,getX(dv),pT+pH+24);
+      ctx.fillText(timeStr,getX(dv),pT+pH+32);
+    }
   }
 }
 
@@ -1807,7 +1948,7 @@ function saveConfiguration() {
     vesselSpeed: Number(els.vesselSpeed.value),
     speedUnit: els.speedUnit.value,
     departureTime: els.departureTime.value,
-    waypoints: state.waypoints.map(w => ({...w})),
+    waypoints: state.waypoints.map(w => ({ name: w.name, lat: w.lat, lng: w.lng })),
     waveDataset: els.waveDataset.value,
     waveVariable: els.waveVariable.value,
     windDataset: els.windDataset.value,
@@ -1821,21 +1962,6 @@ function saveConfiguration() {
   els.configName.value = "";
   updateConfigList();
   els.forecastStatusText.textContent = `Configuration saved: ${configName}`;
-}
-
-function showLoadConfigDialog() {
-  if (state.savedConfigs.length === 0) {
-    alert("No saved configurations. Create one first.");
-    return;
-  }
-  
-  const configNames = state.savedConfigs.map(c => `${c.name} (${new Date(c.created).toLocaleDateString()})`).join("\n");
-  const selectedName = prompt("Select configuration to load:\n" + configNames);
-  
-  if (!selectedName) return;
-  
-  const config = state.savedConfigs.find(c => c.name === selectedName.split(" (")[0]);
-  if (config) loadConfiguration(config);
 }
 
 function loadConfiguration(config) {
@@ -1899,6 +2025,59 @@ function exportConfiguration() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  els.forecastStatusText.textContent = `Exported ${state.savedConfigs.length} configuration(s)`;
+}
+
+function importConfiguration() {
+  if (!els.configFileInput) return;
+  els.configFileInput.click();
+}
+
+// Handle file selection for import
+function handleConfigFileImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) {
+        alert("Invalid configuration file format. Expected an array of configurations.");
+        return;
+      }
+      
+      // Merge imported configs with existing ones
+      let importedCount = 0;
+      imported.forEach(config => {
+        // Ensure config has required fields
+        if (config.name && config.waypoints !== undefined) {
+          // Check if config with same name and created date already exists
+          const exists = state.savedConfigs.some(c => c.id === config.id);
+          if (!exists) {
+            state.savedConfigs.push(config);
+            importedCount++;
+          }
+        }
+      });
+      
+      if (importedCount > 0) {
+        localStorage.setItem("wxtiles_route_configs", JSON.stringify(state.savedConfigs));
+        updateConfigList();
+        els.forecastStatusText.textContent = `Imported ${importedCount} new configuration(s)`;
+        alert(`Successfully imported ${importedCount} configuration(s)`);
+      } else {
+        alert("No new configurations found to import. (Existing configurations were skipped.)");
+      }
+    } catch (error) {
+      alert(`Error importing configurations: ${error.message}`);
+      console.error("Config import error:", error);
+    }
+  };
+  reader.readAsText(file);
+  
+  // Reset file input
+  event.target.value = "";
 }
 
 function updateConfigList() {
@@ -2115,11 +2294,14 @@ function setupEventListeners() {
   if (els.btnSaveConfig) {
     els.btnSaveConfig.addEventListener("click", saveConfiguration);
   }
-  if (els.btnLoadConfig) {
-    els.btnLoadConfig.addEventListener("click", showLoadConfigDialog);
-  }
   if (els.btnExportConfig) {
     els.btnExportConfig.addEventListener("click", exportConfiguration);
+  }
+  if (els.btnImportConfig) {
+    els.btnImportConfig.addEventListener("click", importConfiguration);
+  }
+  if (els.configFileInput) {
+    els.configFileInput.addEventListener("change", handleConfigFileImport);
   }
 
   // Drawer & tabs

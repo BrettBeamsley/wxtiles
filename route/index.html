@@ -394,33 +394,19 @@
             <!-- SECTION 5: CONFIGURATION MANAGEMENT -->
             <section class="card-section">
               <div class="section-header">
-                <h2>5. Save & Load Configuration</h2>
+                <h2>5. Configuration</h2>
                 <span class="pill-step">Optional</span>
               </div>
 
+              <!-- Save Configuration -->
               <div class="control-group">
-                <label for="configName">Configuration Name</label>
+                <label for="configName">Save Configuration As</label>
                 <input id="configName" type="text" placeholder="e.g., Cook Strait Route - October 2024" />
-              </div>
-
-              <div class="button-row">
-                <button type="button" class="btn-secondary" id="btnSaveConfig" title="Save current route, vessel settings, and email config">
+                <button type="button" class="btn-secondary" id="btnSaveConfig" title="Save current route, vessel settings, and email config" style="margin-top: 8px;">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
                   </svg>
-                  <span>Save</span>
-                </button>
-                <button type="button" class="btn-secondary" id="btnLoadConfig" title="Load a saved configuration">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                  </svg>
-                  <span>Load</span>
-                </button>
-                <button type="button" class="btn-secondary" id="btnExportConfig" title="Export configuration as JSON">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                  </svg>
-                  <span>Export</span>
+                  <span>Save Configuration</span>
                 </button>
               </div>
 
@@ -430,9 +416,26 @@
                   <span>Saved Configurations (<strong id="configCountBadge">0</strong>)</span>
                 </summary>
                 <div class="config-list" id="configList">
-                  <p class="empty-state">No saved configurations. Create one using the buttons above.</p>
+                  <p class="empty-state">No saved configurations. Create one using the Save button above.</p>
                 </div>
               </details>
+
+              <!-- Import/Export Options -->
+              <div class="button-row">
+                <button type="button" class="btn-secondary" id="btnExportConfig" title="Export configurations as JSON file">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                  </svg>
+                  <span>Export All</span>
+                </button>
+                <button type="button" class="btn-secondary" id="btnImportConfig" title="Import configurations from JSON file">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                  </svg>
+                  <span>Import</span>
+                </button>
+                <input type="file" id="configFileInput" accept=".json" style="display:none" />
+              </div>
             </section>
 
           </div>
