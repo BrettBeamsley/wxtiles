@@ -1137,7 +1137,7 @@ async function captureMapImage() {
     
     console.log('[MapCapture] Route bounds: lat', minLat.toFixed(2), '-', maxLat.toFixed(2), 'lng', minLng.toFixed(2), '-', maxLng.toFixed(2), 'zoom:', zoom);
     
-    // Fetch and render OSM tiles
+    // Fetch and render OSM tiles with route overlay
     const fetchAndDrawTiles = async () => {
       // Convert degrees to tile coordinates
       const latlngToTile = (lat, lng, z) => {
@@ -1145,6 +1145,17 @@ async function captureMapImage() {
         const x = Math.floor((lng + 180) / 360 * n);
         const y = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n);
         return { x, y, z };
+      };
+      
+      // Convert tile+pixel coordinates back to lat/lng
+      const tileToLatlng = (tileX, tileY, pixelX, pixelY, z) => {
+        const n = Math.pow(2, z);
+        const tilePixelX = tileX * 256 + pixelX;
+        const tilePixelY = tileY * 256 + pixelY;
+        const lng = (tilePixelX / (n * 256)) * 360 - 180;
+        const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * tilePixelY / (n * 256))));
+        const lat = latRad * 180 / Math.PI;
+        return { lat, lng };
       };
       
       const tileTopLeft = latlngToTile(maxLat, minLng, zoom);
@@ -1182,7 +1193,6 @@ async function captureMapImage() {
               resolve();
             };
             img.onerror = () => {
-              // On error, fill with tan color (land) instead of leaving blank
               tileCtx.fillStyle = '#d0ccc4';
               tileCtx.fillRect(drawX, drawY, tileSize, tileSize);
               resolve();
@@ -1196,6 +1206,97 @@ async function captureMapImage() {
       
       // Wait for all tiles to load
       await Promise.all(tilePromises);
+      
+      // Now draw route and markers on the tile canvas (before scaling)
+      // This ensures perfect alignment
+      
+      // Create coordinate mapper for tile canvas
+      const tileToCanvasCoord = (lat, lng) => {
+        const tile = latlngToTile(lat, lng, zoom);
+        const x = (tile.x - tileTopLeft.x) * tileSize + ((lng + 180) * tileSize / 360) % tileSize;
+        const y = (tile.y - tileTopLeft.y) * tileSize + ((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2) * tileSize % tileSize;
+        return [x, y];
+      };
+      
+      // Simpler coordinate mapping using mercator projection
+      const mercatorY = (lat) => {
+        return Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) / Math.PI;
+      };
+      
+      const tileToCanvasCoordSimple = (lat, lng) => {
+        const n = Math.pow(2, zoom);
+        const tileX = Math.floor((lng + 180) / 360 * n) - tileTopLeft.x;
+        const tileY = Math.floor((1 - mercatorY(lat)) / 2 * n) - tileTopLeft.y;
+        
+        // Position within tile (0-1)
+        const fracX = ((lng + 180) / 360 * n) - Math.floor((lng + 180) / 360 * n);
+        const fracY = ((1 - mercatorY(lat)) / 2 * n) - Math.floor((1 - mercatorY(lat)) / 2 * n);
+        
+        const x = tileX * tileSize + fracX * tileSize;
+        const y = tileY * tileSize + fracY * tileSize;
+        return [x, y];
+      };
+      
+      // Draw route line on tile canvas
+      tileCtx.strokeStyle = '#00FF00';
+      tileCtx.lineWidth = 3;
+      tileCtx.lineJoin = 'round';
+      tileCtx.lineCap = 'round';
+      tileCtx.globalLineWidth = 3;
+      
+      tileCtx.beginPath();
+      state.waypoints.forEach((wp, i) => {
+        const [x, y] = tileToCanvasCoordSimple(wp.lat, wp.lng);
+        if (i === 0) tileCtx.moveTo(x, y);
+        else tileCtx.lineTo(x, y);
+      });
+      tileCtx.stroke();
+      
+      // Draw waypoint markers on tile canvas
+      state.waypoints.forEach((wp, i) => {
+        const [x, y] = tileToCanvasCoordSimple(wp.lat, wp.lng);
+        
+        // Draw circle background
+        tileCtx.fillStyle = i === 0 ? '#3b82f6' : i === state.waypoints.length - 1 ? '#ef4444' : '#f59e0b';
+        tileCtx.beginPath();
+        tileCtx.arc(x, y, 6, 0, Math.PI * 2);
+        tileCtx.fill();
+        
+        // Draw border
+        tileCtx.strokeStyle = '#ffffff';
+        tileCtx.lineWidth = 2;
+        tileCtx.beginPath();
+        tileCtx.arc(x, y, 6, 0, Math.PI * 2);
+        tileCtx.stroke();
+        
+        // Draw index number
+        tileCtx.fillStyle = '#ffffff';
+        tileCtx.font = 'bold 9px sans-serif';
+        tileCtx.textAlign = 'center';
+        tileCtx.textBaseline = 'middle';
+        tileCtx.fillText(String(i + 1), x, y);
+      });
+      
+      // Draw vessel position on tile canvas if available
+      if (state.vesselLat !== null && state.vesselLng !== null) {
+        const [vx, vy] = tileToCanvasCoordSimple(state.vesselLat, state.vesselLng);
+        tileCtx.fillStyle = '#06b6d4';
+        tileCtx.beginPath();
+        tileCtx.arc(vx, vy, 7, 0, Math.PI * 2);
+        tileCtx.fill();
+        tileCtx.strokeStyle = '#ffffff';
+        tileCtx.lineWidth = 2;
+        tileCtx.beginPath();
+        tileCtx.arc(vx, vy, 7, 0, Math.PI * 2);
+        tileCtx.stroke();
+        tileCtx.fillStyle = '#ffffff';
+        tileCtx.font = 'bold 10px sans-serif';
+        tileCtx.textAlign = 'center';
+        tileCtx.textBaseline = 'middle';
+        tileCtx.fillText('V', vx, vy);
+      }
+      
+      console.log('[MapCapture] Route drawn on tile canvas');
       
       // Now scale and draw the tile canvas onto the map canvas
       ctx.fillStyle = '#a4c8e1';
@@ -1212,7 +1313,7 @@ async function captureMapImage() {
       
       ctx.drawImage(tileCanvas, offsetX, offsetY, scaledWidth, scaledHeight);
       
-      console.log('[MapCapture] Tiles rendered successfully');
+      console.log('[MapCapture] Tiles rendered successfully to main canvas');
     };
     
     // Execute tile fetching
@@ -1225,94 +1326,13 @@ async function captureMapImage() {
       ctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
     }
     
-    // Calculate canvas coordinates
-    const toCanvasCoord = (lat, lng) => {
-      // Need to map from lat/lng bounds to the actual canvas after tile scaling
-      const x = ((lng - minLng) / (maxLng - minLng)) * mapCanvas.width;
-      const y = mapCanvas.height - ((lat - minLat) / (maxLat - minLat)) * mapCanvas.height;
-      return [x, y];
-    };
-    
-    // Draw route line on top of map
-    ctx.strokeStyle = '#00FF00'; // Bright green for visibility
-    ctx.lineWidth = 4;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 3;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
-    
-    ctx.beginPath();
-    state.waypoints.forEach((wp, i) => {
-      const [x, y] = toCanvasCoord(wp.lat, wp.lng);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-    
-    // Clear shadow effects
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    
-    // Draw waypoint markers
-    state.waypoints.forEach((wp, i) => {
-      const [x, y] = toCanvasCoord(wp.lat, wp.lng);
-      
-      // Draw circle background
-      ctx.fillStyle = i === 0 ? '#3b82f6' : i === state.waypoints.length - 1 ? '#ef4444' : '#f59e0b';
-      ctx.beginPath();
-      ctx.arc(x, y, 7, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Draw border
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(x, y, 7, 0, Math.PI * 2);
-      ctx.stroke();
-      
-      // Draw index number
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(i + 1), x, y);
-    });
-    
-    // Draw vessel position if available
-    if (state.vesselLat !== null && state.vesselLng !== null) {
-      const [vx, vy] = toCanvasCoord(state.vesselLat, state.vesselLng);
-      ctx.fillStyle = '#06b6d4';
-      ctx.beginPath();
-      ctx.arc(vx, vy, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(vx, vy, 8, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText('V', vx, vy);
-    }
-    
-    // Add coordinate labels at corners (adjusted for dark background)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.font = '7px monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(`${maxLat.toFixed(2)}°`, 5, 5);
-    ctx.fillText(`${minLng.toFixed(2)}°`, 5, mapCanvas.height - 12);
-    ctx.textAlign = 'right';
-    ctx.fillText(`${minLat.toFixed(2)}°`, mapCanvas.width - 5, mapCanvas.height - 12);
-    ctx.fillText(`${maxLng.toFixed(2)}°`, mapCanvas.width - 5, 5);
-    
-    // Add title on dark background
+    // Add title and coordinate labels to main canvas
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 2;
     ctx.fillText('Route Map & Waypoint Locations', mapCanvas.width / 2, 5);
     
     // Return as data URL
